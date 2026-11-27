@@ -22,13 +22,13 @@ return [
     'db'=>[
 		'driver'=>'Pdo',
 		'dsn'=>sprintf(
-			'mysql:dbname=%s;hostname=%s;port=%s',
+			'mysql:dbname=%s;hostname=%s;port=%s;charset=utf8mb4',
 			$env('DB_NAME', 'monal_erp_2026'),
 			$env('DB_HOST', '127.0.0.1'),
 			$env('DB_PORT', '3306')
 		),
 		'driver-options'=>[
-			PDO::MYSQL_ATTR_INIT_COMMAND=>'SET NAMES\'UTF8\'',
+			(defined('Pdo\\Mysql::ATTR_INIT_COMMAND') ? Pdo\Mysql::ATTR_INIT_COMMAND : PDO::MYSQL_ATTR_INIT_COMMAND) => "SET NAMES 'utf8mb4' COLLATE 'utf8mb4_unicode_ci'",
 		],
 		'username'=> $env('DB_USER', 'root'),
 		'password' =>$env('DB_PASS', ''),
