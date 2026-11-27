@@ -40,17 +40,45 @@
 		<div>
 			<table class="table table-bordered table-striped table-hover" id="dataTables">
 				<thead>
+					<?php
+						$accountsMappingColumns = 3; // Income, Expense, Inventory
+						if(!empty($hasItemGroupFinanceTransaction)):
+							$accountsMappingColumns++;
+						endif;
+						if(!empty($hasItemGroupDiscount)):
+							$accountsMappingColumns++;
+						endif;
+						if(!empty($hasItemGroupGst)):
+							$accountsMappingColumns++;
+						endif;
+					?>
 					<tr>
-						<th>#</th>
-						<th>Item Group</th>
-						<th>Description</th>
-						<th>Item Class</th>
-						<th class="no-sort">Action</th>
+						<th rowspan="2">#</th>
+						<th rowspan="2">Item Group</th>
+						<th rowspan="2">Description</th>
+						<th rowspan="2">Item Class</th>
+						<th colspan="<?php echo $accountsMappingColumns; ?>" style="text-align:center;">Accounts Mapping</th>
+						<th rowspan="2" class="no-sort">Action</th>
+					</tr>
+					<tr>
+						<?php if(!empty($hasItemGroupFinanceTransaction)): ?>
+						<th>Finance Transaction</th>
+						<?php endif; ?>
+						<th>Income</th>
+						<th>Expense</th>
+						<th>Inventory</th>
+						<?php if(!empty($hasItemGroupDiscount)): ?>
+						<th>Discount on Sales</th>
+						<?php endif; ?>
+						<?php if(!empty($hasItemGroupGst)): ?>
+						<th>GST (Inbound)</th>
+						<?php endif; ?>
 					</tr>
 				</thead>
 				<tbody>
 					<?php
 						$i = 1; 
+						$accountsNotMappedText = '<small><em class="text-muted">Accounts not mapped</em></small>';
 						foreach ($this->itemgroups as $itemgroup):
 					?>
 							<tr class="<?php echo $class; ?>">
@@ -58,6 +86,18 @@
 								<td><b><?php echo $itemgroup['item_group']; ?></b></td> 
 								<td><?php echo $itemgroup['description']; ?></td>                               
 								<td><?php echo $this->itemclassObj->getColumn($itemgroup['item_class'],'item_class'); ?></td> 
+								<?php if(!empty($hasItemGroupFinanceTransaction)): ?>
+								<td><?php echo (isset($itemgroup['finance_transaction']) && isset($assetSubheadMap[$itemgroup['finance_transaction']])) ? $assetSubheadMap[$itemgroup['finance_transaction']] : $accountsNotMappedText; ?></td>
+								<?php endif; ?>
+								<td><?php echo (isset($itemgroup['income_value']) && isset($incomeSubheadMap[$itemgroup['income_value']])) ? $incomeSubheadMap[$itemgroup['income_value']] : $accountsNotMappedText; ?></td>
+								<td><?php echo (isset($itemgroup['expense_value']) && isset($expenseSubheadMap[$itemgroup['expense_value']])) ? $expenseSubheadMap[$itemgroup['expense_value']] : $accountsNotMappedText; ?></td>
+								<td><?php echo (isset($itemgroup['inventory_value']) && isset($inventorySubheadMap[$itemgroup['inventory_value']])) ? $inventorySubheadMap[$itemgroup['inventory_value']] : $accountsNotMappedText; ?></td>
+								<?php if(!empty($hasItemGroupDiscount)): ?>
+								<td><?php echo (isset($itemgroup['discount_value']) && isset($discountSubheadMap[$itemgroup['discount_value']])) ? $discountSubheadMap[$itemgroup['discount_value']] : $accountsNotMappedText; ?></td>
+								<?php endif; ?>
+								<?php if(!empty($hasItemGroupGst)): ?>
+								<td><?php echo (isset($itemgroup['gst_value']) && isset($gstSubheadMap[$itemgroup['gst_value']])) ? $gstSubheadMap[$itemgroup['gst_value']] : $accountsNotMappedText; ?></td>
+								<?php endif; ?>
 								<td>
 									<div class="btn-group">
 										<a class="btn btn-xs btn-info" data-toggle="modal" href="<?php echo $this->url('stock', array('action'=>'edititemgroup', 'id' => $itemgroup['id']));?>" data-target="#modal">

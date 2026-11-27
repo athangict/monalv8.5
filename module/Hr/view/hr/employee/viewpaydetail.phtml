@@ -8,8 +8,9 @@
 ?>
 
 <?php 
-	$minYear = (int)date('Y', strtotime($this->minDate));	
-	$currentYear = (int)date('Y');    
+	$currentYear = (int)date('Y');
+	$minTimestamp = !empty($this->minDate) ? strtotime((string) $this->minDate) : false;
+	$minYear = ($minTimestamp !== false) ? (int)date('Y', $minTimestamp) : $currentYear;
 ?>
 <?php echo $this->partial('hr/employee/partial.phtml', array('active' => 'viewpaydetail', 'id' => $empID)); ?>
 <div class="space-12"></div>
@@ -53,7 +54,7 @@
 			<div class="col-lg-12">
 			<div class="hr hr8 hr-double hr-dotted"></div>
 				<a style="cursor:pointer;" class="pull-right" id="print<?php echo $i;?>">
-					<i class="ace-icon fa fa-file-pdf-o fa-lg red">pdf</i>
+					<i class="ace-icon fa fa-file-pdf-o red"></i>
 				</a>
 				<div class="widget widget-box transparent" id="report-print<?php echo $i;?>">
 					<div class="widget-body">   
@@ -212,4 +213,3 @@
 		}		
 	});	
 </script>
-

@@ -315,8 +315,39 @@ class PayrollController extends AbstractActionController
 			'temppayroll' => $this->getDefinedTable(Hr\TempPayrollTable::class)->getAll(),
 			'temppayrollObj' => $this->getDefinedTable(Hr\TempPayrollTable::class),
 			'payStructureObj' => $this->getDefinedTable(Hr\PaystructureTable::Class),
+			'payHeadColumns' => $this->getPayrollTableColumns(),
 
 		));
+	}
+
+	private function getPayrollTableColumns()
+	{
+		$columnsById = array();
+		foreach ($this->getDefinedTable(Hr\PaystructureTable::class)->getAll() as $payStructure) {
+			$payHeadId = isset($payStructure['pay_head_id']) ? (int) $payStructure['pay_head_id'] : 0;
+			if ($payHeadId < 1 || isset($columnsById[$payHeadId])) {
+				continue;
+			}
+			$columnsById[$payHeadId] = array(
+				'pay_head_id' => $payHeadId,
+				'label' => $payStructure['pay_head'],
+				'deduction' => (string) $payStructure['deduction'],
+			);
+		}
+
+		ksort($columnsById);
+
+		$earnings = array();
+		$deductions = array();
+		foreach ($columnsById as $column) {
+			if ($column['deduction'] === '1') {
+				$deductions[] = $column;
+				continue;
+			}
+			$earnings[] = $column;
+		}
+
+		return array_merge($earnings, $deductions);
 	}
 	
 	/**
@@ -1658,10 +1689,17 @@ class PayrollController extends AbstractActionController
 							throw new \RuntimeException('Failed to save payroll deduction entry.');
 						}
 					endforeach;
-					$employeeDeduction=$this->getDefinedTable(Hr\PaydetailTable::class)->getEmployeeDed('location',$data1,array('ph.payhead_type'=>30));
+					$employeeDeduction=$this->getDefinedTable(Hr\PaydetailTable::class)->getEmployeeDed('location',$data1);
 						foreach($employeeDeduction as $employeeDeductions):
-							$subhead=$this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('ref_id'=>$employeeDeductions['id'],'type'=>'5'),'id');
-							$head=$this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('ref_id'=>$employeeDeductions['id'],'type'=>'5'),'head');
+							$subhead=$this->getDefinedTable(Hr\PayheadtypeTable::class)->getFinanceSubheadId($employeeDeductions['payhead_type_id']);
+							if(!is_scalar($subhead) || !ctype_digit((string) $subhead) || (int) $subhead < 1):
+								throw new \RuntimeException('Missing Finance Sub Head mapping for House Rent deduction PayHead Type.');
+							endif;
+							$subhead=(int) $subhead;
+							$head=$this->getDefinedTable(Accounts\SubheadTable::class)->getColumn($subhead,'head');
+							if(!is_scalar($head) || !ctype_digit((string) $head) || (int) $head < 1):
+								throw new \RuntimeException('Invalid Finance Head mapping for House Rent deduction PayHead Type.');
+							endif;
 							$subheadName = trim((string) $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn($subhead, 'name'));
 							
 						$empdeductiondata = array(

@@ -1,4 +1,4 @@
-  <?php
+<?php
 /**
  *
  * View -- of Purchase/BillingController/addbillAction
@@ -29,10 +29,11 @@ $this->headTitle($this->title);
 								<label for="location" class="control-label">Location</label> 
 								<select class="form-control" name="location" id="location" data-placeholder="Select" required >
 									<option value=""></option>
-									<?php foreach($this->locationObj->get(array('id'=>$source_locs)) as $location):?>
-										<option value="<?php echo $location['id'];?>" <?php echo ($source_locs == $location['id'])?'selected':'';?>>
-											<?php echo $location['location'];?>
-										</option>
+                                    <?php foreach($this->locationObj->get(array('id'=>$admin_location)) as $location):?>
+                                    <option value="<?php echo $location['id'];?>"
+                                        <?php echo ($default_source_loc == $location['id'])?'selected':'';?>>
+                                        <?php echo $location['location'];?>
+                                    </option>
 									<?php endforeach; ?>						
 								</select> 
 							</div>
@@ -61,16 +62,25 @@ $this->headTitle($this->title);
 									<table id="trdetails_table" class="table small-padding">
 										<thead>
 											<tr>
+												<th>Item</th>
 												<th>Receipt Amount</th>
 												<th>Discount</th>
 												<th>Net </th>
-												<th>GST Amt </th>
+												<th>GST </th>
 												<th>Total </th>
 												<th>Reference No.</th>
 											</tr>
 										</thead>
 										<tbody>
 											<tr>
+												<td>
+													<div class="form-group">
+														<select class="form-control" id="bill_item" data-placeholder="Select">
+															<option value=""></option>
+														</select>
+														<input type="hidden" name="bill_item" id="bill_item_hidden" value="">
+													</div>
+												</td>
 												<td>
 													<div class="form-group">
 														<input type="text" class="form-control" name="receipt_amt" id="receipt_amt" value="0.00" readonly>
@@ -88,17 +98,16 @@ $this->headTitle($this->title);
 												</td>
 												<td>
 													<div class="form-group">
-														<input type="text" class="form-control" name="sup_gst" id="sup_gst" value="0.00" />
+														<input type="text" class="form-control" name="sup_gst" id="sup_gst"  />
+													</div>
+												</td><td>
+													<div class="form-group">
+														<input type="text" class="form-control" name="sup_total" id="sup_total" readonly />
 													</div>
 												</td>
 												<td>
 													<div class="form-group">
-														<input type="text" class="form-control" name="sup_total" id="sup_total"  readonly/>
-													</div>
-												</td>
-												<td>
-													<div class="form-group">
-														<input type="text" class="form-control" name="ref_no" id="ref_no"  />
+														<input type="text" class="form-control" name="ref_no" id="ref_no" />
 													</div>
 												</td>
 											</tr>
@@ -107,74 +116,72 @@ $this->headTitle($this->title);
 								</div>
 							</div>
 						</div>
+						
 						<div class="row">
-						<div class="col-lg-3">
-								<label class="control-label" for="freight_party">Freight (Party)</label>
-								<select class="form-control" name="freight_party" id="freight_party">
-								<option value="-1"></option>
-								<?php foreach($shead as $subhead):?>
-								<option value="<?php echo $subhead['id'];?>"><?php echo $subhead['name'];?></option>
-								<?php endforeach;?>
-								</select>
-							</div>
-							<div class="col-lg-2">
-								<label class="control-label" for="freight">Amount</label>
-								<input class="form-control" name="freight" id="freight" value="0.00">
-							</div>
-							<div class="col-lg-2">
-								<label class="control-label" for="freight_gst">Gst Amt</label>
-								<input class="form-control" name="freight_gst" id="freight_gst" value="0.00">
-							</div>
-							<div class="col-lg-2">
-								<label class="control-label" for="freight_total">Total</label>
-								<input class="form-control" name="freight_total" id="freight_total" value="0.00" readonly>
-							</div>
-							<div class="col-lg-2">
-								<label class="control-label" for="freight_ref">Reference No</label>
-								<input class="form-control" name="freight_ref" id="freight_ref">
+							<div class="col-lg-12">
+							<table id="sh_field" class="table table-bordered table-striped small-padding">
+								<thead>
+									<tr>
+											<th>Party</th>
+											<th>Amount</th>
+											<th>GST Amount</th>
+											<th>Total</th>
+											<th>Ref No</th>
+											<th>Remarks</th>
+											<th></th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr class="form-group removeclass1">
+										<td>
+											<select class="form-control tr_sub_head" name="sub_head[]" id="sub_head"  required>
+												<option value=""></option>
+												<?php foreach ($parties as $party): ?>
+													<option value="<?php echo $party['id']; ?>"><?php echo $party['name']; ?></option>
+												<?php endforeach; ?>
+											</select>
+										</td>
+										<td >
+											<input class="form-control tr_amount mr-2" name="amount[]" id="amount" required>
+										</td>
+										<td >
+											<input class="form-control tr_gst_amount mr-2" name="gst_amount[]" id="gst_amount" required>
+										</td>
+										<td >
+											<input class="form-control tr_ptotal mr-2" name="ptotal[]" id="ptotal" readonly>
+										</td><td >
+											<input class="form-control tr_pref_no mr-2" name="pref_no[]" id="pref_no" >
+										</td>
+										<td>
+											<input class="form-control tr_remark mr-2" name="remark[]" id="remark">
+										</td>
+										<td class="bill-row-action"></td>
+									</tr>
+								</tbody>
+							</table>
+
+							<div class="row">
+								<div class="col-lg-12 text-right">
+									<button class="btn btn-xs btn-success" type="button" onclick="sh_field();">
+										<i class="fa fa-plus-square"></i> Add Row
+									</button>
+								</div>
 							</div>
 						</div>
-						<div class="row">
-						<div class="col-lg-3">
-								<label class="control-label" for="tax_party">Tax (Party)</label>
-								<select class="form-control" name="tax_party" id="tax_party" >
-								<option value="-1"></option>
-								<?php foreach($shead as $subhead):?>
-								<option value="<?php echo $subhead['id'];?>"><?php echo $subhead['name'];?></option>
-								<?php endforeach;?>
-								</select>
-							</div>
-							<div class="col-lg-2">
-								<label class="control-label" for="tax">Amount </label>
-								<input class="form-control" name="tax" id="tax" value="0.00">
-							</div>
-							<div class="col-lg-2">
-								<label class="control-label" for="tax_gst">Gst Amt</label>
-								<input class="form-control" name="tax_gst" id="tax_gst" value="0.00">
-							</div>
-							<div class="col-lg-2">
-								<label class="control-label" for="tax_total">Total</label>
-								<input class="form-control" name="tax_total" id="tax_total" value="0.00" readonly>
-							</div>
-							<div class="col-lg-2">
-								<label class="control-label" for="tax_ref">Reference No</label>
-								<input class="form-control" name="tax_ref" id="tax_ref">
-							</div>
 						</div>
-						<br>
 						<div class="row">
-							<div class="col-lg-6"></div>
-							<div class="col-lg-2">
-								<label class="control-label" for="total">Total: </label>
-								<input class="form-control" name="total" id="total" readonly>
+							<div class="col-lg-3"></div>
+							<div class="col-lg-3">
+								<label class="control-label" for="tot_amount">Total Amount: </label>
+								<input class="form-control" name="tot_amount" id="tot_amount" readonly>
 							</div>
-							<div class="col-lg-2">
-								<label class="control-label" for="total_gst">Total GST: </label>
-								<input class="form-control" name="total_gst" id="total_gst" readonly>
+							<div class="col-lg-3">
+								<label class="control-label" for="tot_gst">Total GST: </label>
+								<input class="form-control" name="tot_gst" id="tot_gst" readonly>
 							</div>
-							<div class="col-lg-2">
-								<label class="control-label" for="grand_total">Grand Total: </label>
-								<input class="form-control" name="grand_total" id="grand_total" readonly>
+							<div class="col-lg-3">
+								<label class="control-label" for="grand_tot">Grand Total: </label>
+								<input class="form-control" name="grand_tot" id="grand_tot" readonly>
 							</div>
 						</div>
 						<div class="row">
@@ -200,9 +207,166 @@ $this->headTitle($this->title);
 </div><!-- row -->
 
 <script type="text/javascript">
+var room = 1;
+function initBillChosen(scopeObj){
+	if(!(window.jQuery && $.fn && $.fn.chosen)){
+		return;
+	}
+	var selects = $(scopeObj).find('select');
+	selects.each(function(){
+		if($(this).data('chosen')){
+			$(this).chosen('destroy');
+		}
+	});
+	selects.chosen({
+		width: '100%',
+		disable_search_threshold: 0
+	});
+}
+function lockBillItemSelection(selectedValue){
+	$("#bill_item").val(selectedValue || '');
+	$("#bill_item_hidden").val(selectedValue || '');
+	$("#bill_item").prop('disabled', true).trigger('chosen:updated');
+}
+function sh_field() {
+    room++;
+    var newRow = `
+    <tr class="form-group removeclass${room}">
+        <td>
+			<select class="form-control tr_sub_head" name="sub_head[]" id="sub_head"  required>
+				<option value=""></option>
+				<?php foreach ($parties as $party): ?>
+					<option value="<?php echo $party['id']; ?>"><?php echo $party['name']; ?></option>
+				<?php endforeach; ?>
+			</select>
+		</td>
+		<td >
+			<input class="form-control tr_amount mr-2" name="amount[]" id="amount" required>
+		</td>
+		<td >
+			<input class="form-control tr_gst_amount mr-2" name="gst_amount[]" id="gst_amount" required>
+		</td>
+		<td >
+			<input class="form-control tr_ptotal mr-2" name="ptotal[]" id="ptotal" readonly>
+		</td><td >
+			<input class="form-control tr_pref_no mr-2" name="pref_no[]" id="pref_no" >
+		</td>
+		<td>
+            <input class="form-control tr_remark" name="remark[]" id="remark" >
+        </td>
+		<td class="bill-row-action"></td>
+    </tr>`;
+    $('#sh_field tbody').append(newRow);
+    initBillChosen($('#sh_field tbody tr:last'));
+    refresh_bill_row_buttons();
+    calculateTotalAmount();
+}
+function reset_bill_row(rowObj){
+	rowObj.find('.tr_sub_head').val('').trigger('chosen:updated');
+	rowObj.find('.tr_amount').val('');
+	rowObj.find('.tr_gst_amount').val('');
+	rowObj.find('.tr_ptotal').val('');
+	rowObj.find('.tr_pref_no').val('');
+	rowObj.find('.tr_remark').val('');
+	calculateTotalAmount();
+}
+function refresh_bill_row_buttons(){
+	var rowCount = $('#sh_field tbody tr').length;
+	$('#sh_field tbody tr').each(function(){
+		var actionCell = $(this).find('.bill-row-action');
+		if(rowCount > 1){
+			actionCell.html("<button class='btn btn-warning btn-xs bill-row-remove' type='button' style='margin-top:5px;'><i class='fa fa-times'></i></button>");
+		}else{
+			actionCell.html("<button class='btn btn-warning btn-xs bill-row-reset' type='button' style='margin-top:5px;'><i class='fa fa-refresh'></i></button>");
+		}
+	});
+}
+$(document).on('click', '.bill-row-remove', function () {
+	$(this).closest('tr').remove();
+	refresh_bill_row_buttons();
+	calculateTotalAmount();
+});
+$(document).on('click', '.bill-row-reset', function () {
+	reset_bill_row($(this).closest('tr'));
+});
+	$(document).on('input', '.tr_amount, .tr_gst_amount', function() {
+
+		var amountnput = $(this).closest('tr').find('.tr_amount');  // Adjusted these to use class selectors and scope within the row
+		var gstInput = $(this).closest('tr').find('.tr_gst_amount');
+		var totalInput = $(this).closest('tr').find('.tr_ptotal'); // Assuming there's a field for the total amount with the class "tr_amount"
+
+		var amount = parseFloat(amountnput.val()) || 0;
+		var gst = parseFloat(gstInput.val()) || 0;
+		var total = amount + gst;
+		totalInput.val(total);
+calculateTotalAmount();		
+		
+	});
+	function calculateTotalAmount() {
+		console.log("calculateTotal amount");
+		
+		var total = parseFloat($('#sup_total').val()) ||0;
+		var totalgst =parseFloat($('#sup_gst').val()) || 0;
+		var totalamt =parseFloat($('#net').val()) || 0;
+		// Iterate over each amount input field in the table
+		$('.tr_ptotal').each(function() {
+			var amount = parseFloat($(this).val());
+			if (!isNaN(amount)) { // Make sure it's a valid number
+				total += amount;
+			}
+		});
+		$('.tr_gst_amount').each(function() {
+			var gstamount = parseFloat($(this).val());
+			if (!isNaN(gstamount)) { // Make sure it's a valid number
+				totalgst += gstamount;
+			}
+		});
+		$('.tr_amount').each(function() {
+			var totamount = parseFloat($(this).val());
+			if (!isNaN(totamount)) { // Make sure it's a valid number
+				totalamt += totamount;
+			}
+		});
+
+		// Update the #total field with the new sum
+		$('#grand_tot').val(total.toFixed(2));
+		$('#tot_gst').val(totalgst.toFixed(2));
+		$('#tot_amount').val(totalamt.toFixed(2));
+	}
 $(document).ready(function (){
+	initBillChosen(document);
+	lockBillItemSelection('');
+	refresh_bill_row_buttons();
 	$('#billing_date').datepicker();
-	$("#location").trigger('change');
+	if ($('#location').val()) {
+		$("#location").trigger('change');
+	}
+	$('#location').on('change', function(){
+		//alert($(this).val());
+		$.post(
+			"<?php echo $this->url('billing', array('action' => 'getprn')); ?>",
+			{
+				loc: $(this).val(),
+			},
+			function(data){
+				console.log(data);
+				$("#prn_no").html(data.prn);	
+				$("#prn_no").trigger('chosen:updated');
+				$("#supplier").html("<option value=''></option>");
+				$("#supplier").trigger('chosen:updated');
+				$("#bill_item").html("<option value=''></option>");
+				lockBillItemSelection('');
+				$("#receipt_amt").val('0.00');
+				$("#discount").val('0.00');
+				$("#sup_gst").val('0.00');
+				$("#net").val('0.00');
+				$("#sup_total").val('0.00');
+				calculateTotalAmount();
+			},
+			'json'
+		);	
+		
+	});
 	$('#prn_no').on('change', function(){
 		//alert($(this).val());
 		$.post(
@@ -214,108 +378,52 @@ $(document).ready(function (){
 				console.log(data);
 				$("#supplier").html(data.supplier);	
 				$("#supplier").trigger('chosen:updated');
-				$("#receipt_amt").val(data.sum);	
-				$("#net").val(data.sum);	
-				$("#total").val(data.sum);	
-				calculateSupTotal();
+				$("#bill_item").html(data.item_options);
+				var firstItem = $("#bill_item option[value!='']:first").val() || '';
+				lockBillItemSelection(firstItem);
+				$(".tr_sub_head").html(data.party_options);
+				$(".tr_sub_head").trigger('chosen:updated');
+				var receiptSum = parseFloat(data.sum) || 0;
+				$("#receipt_amt").val(receiptSum.toFixed(2));	
+				var gstSum = parseFloat(data.gst_sum);
+				if (!isNaN(gstSum) && gstSum > 0) {
+					$("#sup_gst").val(gstSum.toFixed(2));
+				}
+				$("#net").val(receiptSum.toFixed(2));
+				calculateTotal();
 			},
 			'json'
 		);	
+		
 	});
 	
 	var prnamInput = $('#receipt_amt');
 	var discountInput = $('#discount');
-	var taxInput = $('#tax');
-	var freightInput = $('#freight');
-	var supgstInput = $('#sup_gst');
-	var taxgstInput = $('#tax_gst');
-	var freigthgstInput = $('#freight_gst');
+	var sup_gst = $('#sup_gst');
 
 	prnamInput.on('input', calculateTotal);
 	discountInput.on('input', calculateTotal);
-	taxInput.on('input', calculateTotal);
-	freightInput.on('input', calculateTotal);
-	taxInput.on('input', calculateTaxTotal);
-	freightInput.on('input', calculateFreightTotal);
-	supgstInput.on('input', calculateSupTotal);
-	taxgstInput.on('input', calculateTaxTotal);
-	freigthgstInput.on('input', calculateFreightTotal);
+	sup_gst.on('input', calculateTotal);
 
 	function calculateTotal() {
 		var prnamInputValue = prnamInput.val();
-		var prnam = parseFloat(prnamInputValue) || 0;
+		var prnam = parseFloat(prnamInputValue.replace(/,/g, '')) || 0;
 		var discount = parseFloat(discountInput.val()) || 0;
-		var tax = parseFloat(taxInput.val()) || 0;
-		var freight = parseFloat(freightInput.val()) || 0;
-
+		var supgst = parseFloat(sup_gst.val()) || 0;
 		
 		var net = prnam - discount;
-var gross = net + tax + freight;
-		if (isNaN(gross) || isNaN(net)) {
+		var total=net+supgst;
+		if (isNaN(total) || isNaN(net)) { 
 			// Handle invalid input values
 			return;
 		}
 
+		$('#sup_total').val(total.toFixed(2));
 		$('#net').val(net.toFixed(2));
-		$('#total').val(gross.toFixed(2));
-		calculateSupTotal();
-		
+		calculateTotalAmount();	
 	}
-	function calculateSupTotal() {
 	
-		var gstamt = parseFloat($('#sup_gst').val()) || 0;
-		var net = parseFloat($('#net').val()) || 0;
 	
-		var tot = gstamt + net;
-		
-		$('#sup_total').val(tot.toFixed(2));
-		calculateGSTTotal();
-		
-	}
-	function calculateFreightTotal() {
-	
-		var gstamt = parseFloat($('#freight_gst').val()) || 0;
-		var net = parseFloat($('#freight').val()) || 0;
-	
-		var tot = gstamt + net;
-		
-		$('#freight_total').val(tot.toFixed(2));
-		calculateGSTTotal();
-		
-	}
-	function calculateTaxTotal() {
-	
-		var gstamt = parseFloat($('#tax_gst').val()) || 0;
-		var net = parseFloat($('#tax').val()) || 0;
-	
-		var tot = gstamt + net;
-		
-		$('#tax_total').val(tot.toFixed(2));
-		calculateGSTTotal();
-		
-	}
-	function calculateGSTTotal() {
-	
-		var gstamt = parseFloat($('#sup_gst').val()) || 0;
-		var freight_gst = parseFloat($('#freight_gst').val()) || 0;
-		var tax_gst = parseFloat($('#tax_gst').val()) || 0;
-	
-		var tot = gstamt + freight_gst + tax_gst;
-		
-		$('#total_gst').val(tot.toFixed(2));
-		calculateGrandTotal();
-		
-	}
-	function calculateGrandTotal() {
-	
-		var gstamt = parseFloat($('#total_gst').val()) || 0;
-		var net = parseFloat($('#total').val()) || 0;
-	
-		var tot = gstamt + net;
-		
-		$('#grand_total').val(tot.toFixed(2));
-		
-	}
 	/*** form validation***/ 
 	const fv = FormValidation.formValidation(document.getElementById('#form'), {
 		fields: {

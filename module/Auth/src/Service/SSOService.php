@@ -159,7 +159,7 @@ class SSOService
         return $endpoint;
     }
 
-    public function getAuthorizationUrl(string $state = null): string
+    public function getAuthorizationUrl(?string $state = null): string
     {
         // Ensure OpenID configuration is loaded before using it
         $this->ensureOpenIdConfigLoaded();
@@ -283,7 +283,7 @@ class SSOService
         return bin2hex(random_bytes(32));
     }
 
-    public function getLogoutUrl(string $postLogoutRedirectUri = null): string
+    public function getLogoutUrl(?string $postLogoutRedirectUri = null): string
     {
         // Ensure OpenID configuration is loaded before using it
         $this->ensureOpenIdConfigLoaded();

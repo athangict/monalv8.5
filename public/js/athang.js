@@ -1,9 +1,23 @@
-/*!
+﻿/*!
 * Athang v1.0.0 (https://athang.com)
 * @version 1.0.0
 * @link https://athang.com
 * Copyright 2021-2022 The Athang IC Tech
 */
+var exportButtonText = {
+	copyHtml5: '<i class="ace-icon fa fa-clone"></i> Copy',
+	csvHtml5: '<i class="ace-icon fa fa-file-text-o"></i> Csv',
+	excelHtml5: '<i class="ace-icon fa fa-file-excel-o"></i> Excel',
+	pdfHtml5: '<i class="ace-icon fa fa-file-pdf-o"></i> Pdf',
+	print: '<i class="ace-icon fa fa-print"></i> Print'
+};
+$.each(exportButtonText, function(name, text) {
+	var button = $.fn.dataTable.ext.buttons[name];
+	if (button) {
+		button.text = text;
+	}
+});
+
 $(document).ready(function(){
 	/* ---------------------------------------------------------------------- */
 	/*  Modal -- Bootstrap
@@ -95,4 +109,8 @@ $(document).ready(function(){
 	CanvasJS.addColorSet('sandColorSet',['#e0876a','#d9ad7c','#a2836e','#674d3c','#fbefcc','#f9ccac','#f4a688','#fff2df']);
 	CanvasJS.addColorSet('rusticColorSet',['#8ca3a3','#c6bcb6','#96897f','#625750','#c8c3cc','#563f46','#484f4f','#e0e2e4']);
 	CanvasJS.addColorSet('beachColorSet',['#96ceb4','#ffeead','#ffcc5c','#ff6f69','#588c7e','#f2e394','#f2ae72','#d96459']);
+
+	if (window.location.pathname.replace(/\/+$/, '') === '/monalv8.2/public/estatereport') {
+		$('.breadcrumbs-fixed + .page-content').css('padding-top', '49px');
+	}
 });

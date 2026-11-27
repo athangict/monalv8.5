@@ -77,6 +77,7 @@
 											<th>Location</th>
 											<th>Head</th>
 											<th>Sub Head</th>
+											<th>Ref No.</th>
 											<th>Debit</th>
 											<th>Credit</th>
 											<th>&nbsp;</th>
@@ -181,6 +182,18 @@
 												</td>
 												<td class="col-lg-2">
 													<div class="form-group">
+														<select id="reference" name="reference[]" class="form-control" data-placeholder="Select">
+															<option value="0">NAN</option>
+															<?php if(!empty($tdetail1['against']) && is_numeric($tdetail1['against']) && $tdetail1['against'] > 0): ?>
+																<option value="<?php echo $tdetail1['against']; ?>" selected>
+																	<?php echo $this->tdetailsObj->getColumn($tdetail1['against'], 'ref_no'); ?>
+																</option>
+															<?php endif; ?>
+														</select>
+													</div>
+												</td>
+												<td class="col-lg-2">
+													<div class="form-group">
 														<input type="text" class="form-control" name="debit[]" id="debit" value="<?php echo $tdetail1['debit'];?>"  required >
 													</div>         
 												</td>
@@ -230,6 +243,13 @@
 													<div class="form-group">
 														<select id="sub_head" name="sub_head[]" class="form-control" data-placeholder="Select" >
 															<option value=""></option>
+														</select>
+													</div>
+												</td>
+												<td class="col-lg-2">
+													<div class="form-group">
+														<select id="reference" name="reference[]" class="form-control" data-placeholder="Select">
+															<option value="0">NAN</option>
 														</select>
 													</div>
 												</td>
@@ -294,6 +314,43 @@
 			tot_debit: <?php echo $total_debit;?>,
 			tot_credit: <?php echo $total_credit; ?>
 		});	
+		$('#trdetails_table').on('change', 'select[id^="sub_head"]', function(){
+			var $row = $(this).closest('tr');
+			var $reference = $row.find('select[id^="reference"]');
+			var subHeadId = $(this).val();
+
+			if (!subHeadId) {
+				$reference.html('<option value="0">NAN</option>').trigger('chosen:updated');
+				return;
+			}
+
+			$.post(
+				'<?php echo $this->url("ajresponse", array("action" => "gettransactions")); ?>',
+				{ sub_head: subHeadId }
+			).done(function(html){
+				$reference.html(html).trigger('chosen:updated');
+			}).fail(function(xhr, status, error){
+				console.error('Failed to load transaction references:', error);
+			});
+		});
+		$('#trdetails_table').on('change', 'select[id^="reference"]', function(){
+			var refId = $(this).val();
+			var $row = $(this).closest('tr');
+			if (!refId || refId === '0') {
+				$row.find('input[id^="debit"]').val('0.000').trigger('change');
+				$row.find('input[id^="credit"]').val('0.000').trigger('change');
+				return;
+			}
+
+			$.getJSON(
+				'<?php echo $this->url("ajresponse", array("action" => "getamount")); ?>/' + refId
+			).done(function(data){
+				$row.find('input[id^="debit"]').val(data.debit || '0.000').trigger('change');
+				$row.find('input[id^="credit"]').val(data.credit || '0.000').trigger('change');
+			}).fail(function(xhr, status, error){
+				console.error('Failed to load transaction reference amounts:', error);
+			});
+		});
 
 		const fv = FormValidation.formValidation(document.getElementById('#form'), {
 			fields: {

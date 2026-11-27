@@ -9,73 +9,54 @@
 <?php foreach($sheet as $sheets);
 foreach($this->employeeObj->get($sheets['employee']) as $emp);
 $employeeUser = $this->userObj->getColumn(array('employee'=>$emp['id']), 'id');	?>
-
-<div class="space-12"></div>
-
-	<div class="row">
-		
-		<div class="col-lg-12"> 
-		<div class="widget-toolbar hidden-xs">
-					<div class="btn-list">
-						<?php //if($edit_option){ echo $this->button(2,$row['id']); }?>
-						<span data-bs-toggle='tooltip' data-bs-placement='top' title='PDF Print'>
-							<a class='btn btn-danger btn-xs' id="print">
-							<i class="ace-icon fa fa-file-pdf-o bigger-120"></i></a></span>
-					</div>
+<div class="row">
+	<div class="col-lg-12">
+		<div class="widget-box transparent" id="print-content">
+			<div class="widget-header widget-header-smaller text-center" style="position: relative;">
+				<h4 class="widget-title blue bolder smaller fs-3">Notesheet</h4>
+				<div class="widget-toolbar hidden-xs no-border" style="position: absolute; top: 0; right: 0;">
+					<a class="voucher-header-action" style="cursor: pointer;" id="print" title="Print PDF">
+						<i class="ace-icon fa fa-file-pdf-o red"></i>
+					</a>
 				</div>
-		
-
-			<div class="widget-box transparent" id="print-content">
-				<div class="row">
-					<div class="col-xs-12 text-center">
-						<div class="widget-header widget-header-smaller">
-							<h4 class="widget-title blue bolder smaller fs-3">Notesheet</h4>
-						</div>
-					</div>
-				</div>
-
-				
-				<div class="widget-body" >
-					<div class="widget-main padding-12">
-						<div class="row" id="convert-tb0">
-							<div class="col-lg-12" id="convert-tb1">
-										Date: <b class="black"><?php  echo date('d-m-Y', strtotime($sheets['date'])); ?></b><br>
+			</div>
+			<div class="widget-body" >
+				<div class="widget-main padding-12">
+					<div class="row" id="convert-tb0">
+						<div class="col-lg-12" id="convert-tb1">
+									Date: <b class="black"><?php  echo date('d-m-Y', strtotime($sheets['date'])); ?></b><br>
 									Number: <b class="black"><?php echo $sheets['number']; ?></b><br>
-										Priority Type: <b class="black"><?php if($sheets['priority_type'] == 1): echo "Urgent"; else: echo "Not Important"; endif; ?></b><br>
-										Subject: <b class="black"><?php echo $sheets['subject']; ?></b>
-								</div>
-						</div>
-						<div class="row">
-							<div class="col-lg-12">
-									<p class="black"><?php echo $sheets['description'];?> </p>
+									Priority Type: <b class="black"><?php if($sheets['priority_type'] == 1): echo "Urgent"; else: echo "Not Important"; endif; ?></b><br>
+									Subject: <b class="black"><?php echo $sheets['subject']; ?></b>
 							</div>
+					</div>
+					<div class="row">
+						<div class="col-lg-12">
+								<p class="black"><?php echo $sheets['description'];?> </p>
 						</div>
-							<div class="col-lg-12" id="convert-tb2"><?php foreach($this->activityObj->get(array('process'=>522,'process_id'=>$sheets['id'])) as $actvity):?>	
-							<div class='underlined'>
-									<b class="black"><?php echo $this->userObj->getColumn($actvity['author'],'name');?></b>&nbsp;<?php echo $this->status($actvity['status']);?> to: <b class="black"><?php echo strtoupper($this->userObj->getColumn($actvity['send_to'],'name'));?> on</b>&nbsp;<?php echo date('d-m-Y', strtotime($actvity['created'])); ?>
-									<br>Remarks: <b class="black"><?php echo $actvity['remarks'];?></b>
-							</div>
-								<style>
-									.underlined {
-										border-bottom: 0.5px solid #000; /* Black underline */
-										padding-bottom: 10px; /* Adjust spacing as needed */
-										margin-bottom: 10px; /* Adjust spacing as needed */
-									}
-								</style>
-							<?php endforeach;?></div>
+					</div>
+					<hr width="100%" height="1" fgcolor="#999999" />
+					<h5 class="blue bolder">Activity Log</h5>
+					<div class="row">
+						<div class="col-lg-12" id="convert-tb2"><?php foreach($this->activityObj->get(array('process'=>522,'process_id'=>$sheets['id'])) as $actvity):?>
+						<div class='underlined'>
+								<b class="black"><?php echo $this->userObj->getColumn($actvity['author'],'name');?></b>&nbsp;<?php echo $this->status($actvity['status']);?> to: <b class="black"><?php echo strtoupper($this->userObj->getColumn($actvity['send_to'],'name'));?> on</b>&nbsp;<?php echo date('d-m-Y', strtotime($actvity['created'])); ?>
+								<br>Remarks: <b class="black"><?php echo $actvity['remarks'];?></b>
+						</div>
+						<?php endforeach;?></div>
 					</div>
 				</div>
 			</div>
 		</div>
 	</div>
+</div>
 </div><?php //if($sheets['status']==2 || $sheets['status']==8):?>
 	<div class="col-lg-12">
 		<?php echo $this->partial('partial/attachment.phtml', array('process' => '522', 'process_id'=>$sheets['id'], 'applicationNO'=>$sheets['number'], 'login_id' =>$login_id,'status'=>$sheets['status']));?>
 	</div><?php //endif;?>
 	<div class="row">
-		<div class="col-lg-7">
-		</div>
-		<div class="col-lg-5" style="text-align: right"><?php
+		<div class="col-lg-8"></div>
+		<div class="col-lg-3" style="text-align: right"><?php
 		$employeeUser = $this->userObj->getColumn(array('employee'=>$emp['id']), 'id');	
 		$max_activity = $this->flowtransactionObj->getMax($column='activity', $where=array('application'=>$sheets['id'],'process'=>522));
 		$current_flow = $this->flowtransactionObj->get(array('application'=>$sheets['id'], 'activity'=>$max_activity,'process'=>522));
@@ -116,5 +97,3 @@ $(function(){
 	
 });
 </script>
-
-

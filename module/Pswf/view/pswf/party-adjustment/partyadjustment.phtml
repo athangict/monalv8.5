@@ -89,9 +89,7 @@
 							<td style="text-align:right"><?php  echo number_format($row['amount'], 2, '.', ',');?></td>
 							<td class="action">
 								<div class="btn-group">
-									<a class="btn btn-xs btn-danger" data-toggle="modal" data-target="#modal" href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "19-".$row['id'])); ?>" title="View Activity Logs">
-										<i class="ace-icon fa fa-plus bigger-120" ></i>  
-							  		</a>
+									<?php echo $this->button(6, "19-".$row['id'], 0, 3);?>
 						  		</div>
 							</td>								
 						</tr>					

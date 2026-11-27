@@ -86,27 +86,34 @@ class ReceiptController extends AbstractActionController
 	public function indexAction()
 	{
 		$this->init();
-		$year ='';
-		$month = '';
+		$currentYear = date('Y');
+		$currentMonth = date('n');
+		$sourceLocs = (string) $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_author, 'location');
+		$permittedLocations = $this->getPermittedLocationIds($sourceLocs);
+		$defaultLocation = !empty($permittedLocations) ? (string) $permittedLocations[0] : '-1';
+
 		if($this->getRequest()->isPost())
 		{
 			$form = $this->getRequest()->getPost();
+			$year = isset($form['year']) ? trim((string) $form['year']) : '';
+			$month = isset($form['month']) ? trim((string) $form['month']) : '';
+			$location = isset($form['location']) ? trim((string) $form['location']) : '';
 
-			$year = $form['year'];
-			$month = $form['month'];
-			$location = $form['location'];
-
-			$month = ($month == 0)? date('m'):$month;
-			$year = ($year == 0)? date('Y'):$year;
+			$year = ($year === '' || $year === '0') ? $currentYear : $year;
+			$month = ($month === '' || $month === '0') ? $currentMonth : $month;
+			$location = ($location === '' || $location === '0') ? $defaultLocation : $location;
+			if (!empty($permittedLocations) && !in_array((string) $location, $permittedLocations, true)) {
+				$location = $defaultLocation;
+			}
 			$data = array(
 					'year' => $year,
 					'month' => $month,
 					'location' => $location,
 			);
 		}else{
-			$month = ($month == 0)? date('m'):$month;
-			$year = ($year == 0)? date('Y'):$year;
-			$location = '-1';
+			$year = $currentYear;
+			$month = $currentMonth;
+			$location = $defaultLocation;
 
 			$data = array(
 					'year' => $year,
@@ -120,10 +127,37 @@ class ReceiptController extends AbstractActionController
                'receipts_results' => $receipts_results,
 			   'minYear' 		  => $this->getDefinedTable(Purchase\PurchaseReceiptTable::class)->getMin('prn_date'),
 			   'data'             => $data,
+			   'permittedLocations' => $permittedLocations,
 			   'partyObj'         => $this->getDefinedTable(Accounts\PartyTable::class),
 			   'locationObj'      => $this->getDefinedTable(Administration\LocationTable::class),
 			   'poObj'            => $this->getDefinedTable(Purchase\PurchaseOrderTable::class),
 		));
+	}
+
+	private function getPermittedLocationIds($sourceLocs)
+	{
+		$sourceLocs = trim((string) $sourceLocs);
+		if ($sourceLocs === '') {
+			return array();
+		}
+
+		$locationIds = array_filter(array_map('trim', explode(',', $sourceLocs)), 'strlen');
+		$locationIds = array_values(array_unique($locationIds));
+		return $locationIds;
+	}
+	private function hasTableColumn($table, $column)
+	{
+		$table = trim((string)$table);
+		$column = trim((string)$column);
+		if($table === '' || $column === ''):
+			return false;
+		endif;
+		$adapter = $this->_container->get('Laminas\Db\Adapter\Adapter');
+		$result = $adapter->query(
+			"SHOW COLUMNS FROM `".$table."` LIKE '".$column."'",
+			$adapter::QUERY_MODE_EXECUTE
+		)->toArray();
+		return (sizeof($result) > 0);
 	}
 
 	/**
@@ -202,11 +236,28 @@ class ReceiptController extends AbstractActionController
 	public function editreceiptAction()
 	{
 		$this->init();
+		$editableStatus = '2';
+		$currentStatus = (string) $this->getDefinedTable(Purchase\PurchaseReceiptTable::class)->getColumn($this->_id, 'status');
+
+		if($currentStatus !== $editableStatus){
+			$this->flashMessenger()->addMessage("error^ This Purchase Receipt is already processed and cannot be edited.");
+			return $this->redirect()->toRoute('receipt', array('action' => 'viewreceipt', 'id' => $this->_id));
+		}
 
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			$receiptId = (int) $this->_id;
+			if($receiptId <= 0){
+				$this->flashMessenger()->addMessage("error^ Invalid Purchase Receipt ID.");
+				return $this->redirect()->toRoute('receipt');
+			}
+			$postStatus = (string) $this->getDefinedTable(Purchase\PurchaseReceiptTable::class)->getColumn($receiptId, 'status');
+			if($postStatus !== $editableStatus){
+				$this->flashMessenger()->addMessage("error^ This Purchase Receipt is already processed and cannot be edited.");
+				return $this->redirect()->toRoute('receipt', array('action' => 'viewreceipt', 'id' => $receiptId));
+			}
 			$data = array(
-					 'id'			      => $form['id'],
+					 'id'			      => $receiptId,
 					 'purchase_order'     => $form['po_no'],
 					 'prn_date'			  => $form['prn_date'],
 					 'location'           => $form['location'],
@@ -361,11 +412,15 @@ class ReceiptController extends AbstractActionController
 			$accepted_qty =$form['accepted_qty'];
 			$po_quantity=$form['po_quantity'];
 			$damage_qty=$form['damage_qty'];
+			$hasItemNameColumn = $this->hasTableColumn('pur_pr_details', 'item_name');
+			$result = 0;
 			for($i=0; $i < sizeof($accepted_qty); $i++):
 				if(isset($accepted_qty[$i]) && is_numeric($accepted_qty[$i])):
+					$itemRaw = isset($item[$i]) ? trim((string)$item[$i]) : '';
+					$itemValue = (is_numeric($itemRaw) && (int)$itemRaw > 0) ? (string)((int)$itemRaw) : '0';
 					$data = array(
 						'purchase_receipt' => $this->_id,
-						'item' => $item[$i],
+						'item' => $itemValue,
 						'uom' => 1,
 						'rate' => $rate[$i],
 						'batch'=>1,
@@ -376,6 +431,9 @@ class ReceiptController extends AbstractActionController
 						'created' =>$this->_created,
 						'modified' =>$this->_modified,
 					);
+					if($hasItemNameColumn):
+						$data['item_name'] = ($itemValue === '0') ? $itemRaw : null;
+					endif;
 					$result = $this->getDefinedTable(Purchase\PRDetailsTable::class)->save($data);
 				endif;
 			endfor;
@@ -411,6 +469,12 @@ class ReceiptController extends AbstractActionController
 	{
 		$this->init();
 	
+		$receiptDetails = $this->getDefinedTable(Purchase\PRDetailsTable::class)->get(array('purchase_receipt'=>$this->_id));
+		if(sizeof($receiptDetails) < 1){
+			$this->flashMessenger()->addMessage("error^ Please add item details first.");
+			return $this->redirect()->toRoute('receipt', array('action'=> 'viewreceipt', 'id'=>$this->_id));
+		}
+
 		$pon = $this->getDefinedTable(Purchase\PurchaseReceiptTable::class)->getColumn($this->_id,'purchase_order');
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
@@ -420,12 +484,16 @@ class ReceiptController extends AbstractActionController
 			$accepted_qty=$form['accepted_qty'];
 			$po_quantity=$form['po_quantity'];
 			$damage_qty=$form['damage_qty'];
+			$hasItemNameColumn = $this->hasTableColumn('pur_pr_details', 'item_name');
+			$result = 0;
 			for($i=0; $i < sizeof($item); $i++):
-				if(isset($item[$i]) && is_numeric($item[$i])):
+				if(isset($accepted_qty[$i]) && is_numeric($accepted_qty[$i])):
+					$itemRaw = isset($item[$i]) ? trim((string)$item[$i]) : '';
+					$itemValue = (is_numeric($itemRaw) && (int)$itemRaw > 0) ? (string)((int)$itemRaw) : '0';
 					$data = array(
 						'id'				=> $id[$i],
 						'purchase_receipt' 	=> $this->_id,
-						'item'				=> $item[$i],
+						'item'				=> $itemValue,
 						'uom' 				=> 1,
 						'rate' 				=> $rate[$i],
 						'batch'				=>1,
@@ -436,6 +504,9 @@ class ReceiptController extends AbstractActionController
 						'created' 			=>$this->_created,
 						'modified' 			=>$this->_modified,
 					);
+					if($hasItemNameColumn):
+						$data['item_name'] = ($itemValue === '0') ? $itemRaw : null;
+					endif;
 					$result = $this->getDefinedTable(Purchase\PRDetailsTable::class)->save($data);
 				endif;
 			endfor;
@@ -457,7 +528,7 @@ class ReceiptController extends AbstractActionController
 			}
 		  
 		return new ViewModel( array(
-				'receipt'     => $this->getDefinedTable(Purchase\PRDetailsTable::class)->get(array('purchase_receipt'=>$this->_id)),
+				'receipt'     => $receiptDetails,
 				'itemObj'		=>$this->getDefinedTable(Stock\ItemTable::class),
 				'pr'=>$this->getDefinedTable(Purchase\PurchaseReceiptTable::class)->get($this->_id),
 				
@@ -473,6 +544,10 @@ class ReceiptController extends AbstractActionController
 	{
 		$this->init();
 		$pur_receipt_details = $this->getDefinedTable(Purchase\PRDetailsTable::class)->get(array('purchase_receipt'=>$this->_id));
+		if(sizeof($pur_receipt_details) < 1){
+			$this->flashMessenger()->addMessage("error^ Please add item details first before commit.");
+			return $this->redirect()->toRoute('receipt', array('action'=>'viewreceipt', 'id'=>$this->_id));
+		}
 		$purchase_order_id = $this->getDefinedTable(Purchase\PurchaseReceiptTable::class)->getColumn($this->_id,'purchase_order');
 		foreach($this->getDefinedTable(Purchase\PODetailsTable::class)->get(array('purchase_order'=>$purchase_order_id)) as $podetails);
 		$location=$this->getDefinedTable(Purchase\PurchaseReceiptTable::class)->getColumn($this->_id,'location');
@@ -481,10 +556,16 @@ class ReceiptController extends AbstractActionController
 			foreach($this->getDefinedTable(Asset\AssettypeTable::class)->get(array('subhead'=>$podetails['subhead'])) as $asst);
 			//print_r($asst['id']);exit;
 			foreach($pur_receipt_details as $row){
+					$assetItemName = '';
+					if(isset($row['item']) && trim((string)$row['item']) != '' && trim((string)$row['item']) != '0'):
+						$assetItemName = trim((string)$row['item']);
+					elseif(isset($row['item_name']) && trim((string)$row['item_name']) != ''):
+						$assetItemName = trim((string)$row['item_name']);
+					endif;
 					for($i=0;$i<$row['accept_qty'];$i++){
 						$asset=array(
-						'name'					=> $row['item'],
-						'code'					=> $row['item'],
+						'name'					=> $assetItemName,
+						'code'					=> $assetItemName,
 						'purchase_date'				=> $pr['prn_date'],
 						'asset_type'			=> $asst['id'],
 						'assetid'				=> "null",
@@ -611,3 +692,4 @@ class ReceiptController extends AbstractActionController
 		exit;
 	}*/
 }
+

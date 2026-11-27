@@ -30,7 +30,7 @@
 									<label for="location" class="control-label">Location</label>
 									<select id="location" name="location" class="form-control" data-placeholder="Select" required>
 										<option value=""></option>
-										<?php foreach ($this->locationObj->getAll() as $locations):?>
+										<?php foreach ($permitted_locations as $locations):?>
 										 <option value="<?php echo $locations['id']; ?>">
 											<?php echo $locations['location']; ?>
 										 </option>
@@ -955,3 +955,4 @@
 	});*/  
 //});  
 </script>
+

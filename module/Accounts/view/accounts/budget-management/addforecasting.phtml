@@ -30,7 +30,7 @@
 								<select id="head" name="head" class="form-control" data-placeholder="Select" required>
 									<option value=""></option>	
 									<?php foreach($this->headObj->getAll() as $headRow): ?>
-									  <option value="<?php echo $headRow['id'];?>"><?php echo $headRow['name']; ?></option>	
+									  <option value="<?php echo $headRow['id'];?>"><?php echo \Accounts\Support\AccountLabel::html($headRow['name'], $headRow['code']); ?></option>
 									<?php endforeach;  	?>
 								</select> 
 							</div> 							

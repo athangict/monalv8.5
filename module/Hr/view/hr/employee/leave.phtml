@@ -211,10 +211,7 @@
 													</span> </strong>
 												</td>
 												<td class="action">
-													<a class="btn-xs btn-danger" data-toggle="modal" data-target="#modal" 
-														href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "22-".$leave['id'])); ?>" title="View Activity Logs">
-														<i class="ace-icon fa fa-plus smaller-120" ></i>  
-												   </a>
+													<?php echo $this->button(6, "22-".$leave['id'], 0, 3);?>
 												</td>
 											</tr>												
 										<?php endif;

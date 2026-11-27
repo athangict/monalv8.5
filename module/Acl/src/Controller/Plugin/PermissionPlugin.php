@@ -322,11 +322,22 @@ class PermissionPlugin extends AbstractPlugin{
         $hrole = $hr_stmt->execute(); 
         foreach($hrole as $hrow);
 		$highest_role = $hrow['role'];
-		
+	
 		$regionlist = array();
 		if(!in_array($highest_role,$login_role_array)){
-			//$regionQuery ="SELECT * FROM `adm_region` WHERE `status` = '1' AND `id` IN(SELECT DISTINCT `region` FROM `adm_location` WHERE `id` IN(".$admin_location."))";
-			$regionQuery ="SELECT * FROM `adm_region` WHERE `status` = '1'";
+			$locationIds = array();
+			foreach(explode(',', (string)$admin_location) as $locationId):
+				$locationId = trim($locationId);
+				if(ctype_digit($locationId) && (int)$locationId > 0):
+					$locationIds[] = (int)$locationId;
+				endif;
+			endforeach;
+			$locationIds = array_values(array_unique($locationIds));
+			if(sizeof($locationIds) > 0):
+				$regionQuery ="SELECT * FROM `adm_region` WHERE `status` = '1' AND `id` IN(SELECT DISTINCT `region` FROM `adm_location` WHERE `status`='1' AND `id` IN(".implode(',', $locationIds)."))";
+			else:
+				$regionQuery ="SELECT * FROM `adm_region` WHERE 1 = 0";
+			endif;
 		}else{
 			$regionQuery ="SELECT * FROM `adm_region` WHERE `status` = '1'";
 		}
@@ -362,14 +373,25 @@ class PermissionPlugin extends AbstractPlugin{
 		$highest_role = $hrow['role'];
 
 		$locationlist = array();
+		$regionId = (is_numeric($region_data) && (int)$region_data > 0) ? (int)$region_data : 0;
 		if(!in_array($highest_role,$login_role_array)){
-			//$locationQuery ="SELECT * FROM `adm_location` WHERE `status` = '1' AND `id` IN(".$admin_location.")";
-			//$locationQuery .= ($region_data!=0)?" AND region = '".$region_data."'":"";
-			$locationQuery ="SELECT * FROM `adm_location` WHERE `status` = '1'";
-			$locationQuery .= ($region_data!=0)?" AND region = '".$region_data."'":"";
+			$locationIds = array();
+			foreach(explode(',', (string)$admin_location) as $locationId):
+				$locationId = trim($locationId);
+				if(ctype_digit($locationId) && (int)$locationId > 0):
+					$locationIds[] = (int)$locationId;
+				endif;
+			endforeach;
+			$locationIds = array_values(array_unique($locationIds));
+			if(sizeof($locationIds) > 0):
+				$locationQuery ="SELECT * FROM `adm_location` WHERE `status` = '1' AND `id` IN(".implode(',', $locationIds).")";
+				$locationQuery .= ($regionId>0)?" AND region = '".$regionId."'":"";
+			else:
+				$locationQuery ="SELECT * FROM `adm_location` WHERE 1 = 0";
+			endif;
 		}else{
 			$locationQuery ="SELECT * FROM `adm_location` WHERE `status` = '1'";
-			$locationQuery .= ($region_data!=0)?" AND region = '".$region_data."'":"";
+			$locationQuery .= ($regionId>0)?" AND region = '".$regionId."'":"";
 		}
 		$location_stmt = $this->dbAdapter->query($locationQuery);
 		$locations = $location_stmt->execute(); 

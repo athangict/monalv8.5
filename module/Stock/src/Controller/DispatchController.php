@@ -159,11 +159,15 @@ class DispatchController extends AbstractActionController
 			$tmp_DCNo = $location_prefix."DC".$date;
 			$results = $this->getDefinedTable(Stock\DispatchTable::class)->getMonthlyDC($tmp_DCNo);
 		
-			$dc_no_list = array();	
+			$dc_no_list = array();
+			$prefix_length = strlen($tmp_DCNo);	
 			foreach($results as $result):
-				array_push($dc_no_list, substr($result['challan_no'], 11));
+				$serial_part = substr($result['challan_no'], $prefix_length);
+				if($serial_part !== '' && ctype_digit((string)$serial_part)):
+					array_push($dc_no_list, (int)$serial_part);
+				endif;
 			endforeach;
-			$next_serial = max($dc_no_list) + 1;
+			$next_serial = (sizeof($dc_no_list) > 0) ? (max($dc_no_list) + 1) : 1;
 				
 			switch(strlen($next_serial)){
 				case 1: $next_dc_serial = "000".$next_serial; break;

@@ -11,8 +11,8 @@
         <h4 class="modal-title"> <i class="fa fa-asterisk"></i> New Item Group</h4>
     </div>  <!-- /modal-header -->
     <div class="modal-body">
-		<div class="panel panel-default">                       
-			<div class="panel-body">  
+		<div class="panel panel-default">
+			<div class="panel-body">
 				<div class="form-group">
 					<label for="itemclass" class="control-label">Item Class</label>
 					<select class="form-control" name="itemclass" id="itemclass" data-placeholder="Select"> 
@@ -30,6 +30,95 @@
 					<label for="description" class="control-label">Description</label>
 					<input type="text" class="form-control" name="description" id="description" size="30" placeholder="Description" required/> 
 				</div>
+				<div class="panel panel-default">
+					<div class="panel-body accounts-config-body">
+						<div class="form-group" style="margin-bottom: 10px;">
+							<label class="control-label" style="font-style: italic; font-size: 12px; color: #666;">Accounts Mapping</label>
+						</div>
+						<div class="row">
+							<?php if(!empty($hasItemGroupFinanceTransaction)): ?>
+							<div class="col-md-6">
+								<div class="form-group">
+									<label for="finance_transaction" class="control-label">Finance Transaction (Asset Subhead)</label>
+									<select class="form-control" name="finance_transaction" id="finance_transaction" data-placeholder="Select">
+										<option value=""></option>
+										<?php foreach($assetSubheads as $assetSubhead): ?>
+											<option value="<?php echo $assetSubhead['id']; ?>">
+												<?php echo $assetSubhead['code'].' - '.$assetSubhead['name']; ?>
+											</option>
+										<?php endforeach; ?>
+									</select>
+								</div>
+							</div>
+							<?php endif; ?>
+							<div class="col-md-6">
+								<div class="form-group">
+									<label for="income" class="control-label">Income</label>
+									<select class="form-control" name="income" id="income" data-placeholder="Select">
+										<option value=""></option>
+										<?php foreach($incomeSubheads as $incomeSubhead): ?>
+											<option value="<?php echo $incomeSubhead['id']; ?>">
+												<?php echo $incomeSubhead['code'].' - '.$incomeSubhead['name']; ?>
+											</option>
+										<?php endforeach; ?>
+									</select>
+								</div>
+							</div>
+							<div class="col-md-6">
+								<div class="form-group">
+									<label for="expense" class="control-label">Expense</label>
+									<select class="form-control" name="expense" id="expense" data-placeholder="Select">
+										<option value=""></option>
+										<?php foreach($expenseSubheads as $expenseSubhead): ?>
+											<option value="<?php echo $expenseSubhead['id']; ?>">
+												<?php echo $expenseSubhead['code'].' - '.$expenseSubhead['name']; ?>
+											</option>
+										<?php endforeach; ?>
+									</select>
+								</div>
+							</div>
+							<div class="col-md-6">
+								<div class="form-group">
+									<label for="inventory" class="control-label">Inventory</label>
+									<select class="form-control" name="inventory" id="inventory" data-placeholder="Select">
+										<option value=""></option>
+										<?php foreach($inventorySubheads as $inventorySubhead): ?>
+											<option value="<?php echo $inventorySubhead['id']; ?>">
+												<?php echo $inventorySubhead['code'].' - '.$inventorySubhead['name']; ?>
+											</option>
+										<?php endforeach; ?>
+									</select>
+								</div>
+							</div>
+							<div class="col-md-6">
+								<div class="form-group">
+									<label for="discount" class="control-label">Discount on Sales</label>
+									<select class="form-control" name="discount" id="discount" data-placeholder="Select">
+										<option value=""></option>
+										<?php foreach($discountSubheads as $discountSubhead): ?>
+											<option value="<?php echo $discountSubhead['id']; ?>">
+												<?php echo $discountSubhead['code'].' - '.$discountSubhead['name']; ?>
+											</option>
+										<?php endforeach; ?>
+									</select>
+								</div>
+							</div>
+							<div class="col-md-6">
+								<div class="form-group">
+									<label for="gst" class="control-label">GST</label>
+									<select class="form-control" name="gst" id="gst" data-placeholder="Select">
+										<option value=""></option>
+										<?php foreach($gstSubheads as $gstSubhead): ?>
+											<option value="<?php echo $gstSubhead['id']; ?>">
+												<?php echo $gstSubhead['code'].' - '.$gstSubhead['name']; ?>
+											</option>
+										<?php endforeach; ?>
+									</select>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
 			</div>
 		</div>
     </div> <!-- /modal-body -->
@@ -38,6 +127,20 @@
         <button type="button" class="btn btn-warning" data-dismiss="modal" ><i class="fa fa-times"></i> Cancel </button> 
     </div>  
 </form>
+<style>
+.accounts-config-body .control-label {
+	font-style: italic;
+}
+.accounts-config-body .form-control {
+	background-color: #fafafa;
+	border-color: #e6e6e6;
+}
+.accounts-config-body .chosen-container-single .chosen-single {
+	background: #fafafa;
+	border: 1px solid #e6e6e6;
+	box-shadow: none;
+}
+</style>
 <script>
 $('document').ready(function(){
 	$('form select').chosen();

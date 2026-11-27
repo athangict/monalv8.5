@@ -11,33 +11,35 @@
 	<div class="col-lg-12">
 		<?php $currentYear = (int)date('Y');
                 $minYear = ($this->minYear == 0)? date('Y'):$this->minYear;?>
-	            <div class="row">
-			<form>
-				<div class="form-group col-lg-2">
-					<label for="year" class="control-label">Year</label>
-					<select name="year" id="year" class="form-control">
-						<option value="-1">All</option>
-						<?php for($year = $currentYear; $year >= $minYear; $year--):
-							$selected = ($this->year == $year)?'selected':''; ?>
-							<option value="<?php echo $year;?>" <?php echo $selected;?>> <?php echo $year; ?> </option>
-						<?php endfor;?>
-					</select>
-				</div>
-			</form>
-			<div class="clearfix">
-				<?php echo $this->button(2);?>
+		<div class="row">
+			<div class="col-lg-12">
+				<form class="form-inline">
+					<div class="form-group">
+						<label for="year" class="control-label">Year</label><br/>
+						<select name="year" id="year" class="form-control">
+							<option value="-1">All</option>
+							<?php for($year = $currentYear; $year >= $minYear; $year--):
+								$selected = ($this->year == $year)?'selected':''; ?>
+								<option value="<?php echo $year;?>" <?php echo $selected;?>> <?php echo $year; ?> </option>
+							<?php endfor;?>
+						</select>
+					</div>
+					<div class="form-group" style="margin-left:12px;">
+						<label class="control-label">&nbsp;</label><br/>
+						<?php echo $this->button(2);?>
+					</div>
+				</form>
 			</div>
-		</div>
+		</div><br>
 		<table class="table card-table text-nowrap" id="dataTables">
 			<thead>
 				<tr>
-					<th>#</th>
-					<th>Payroll for the month</th>
-					<th>Total Entries</th>
-					<th>Total Gross Pay</th>
-					<th>Total Deduction</th>
-					<th>Total Net Pay</th>
-					<th class="no-sort no-printpdf">Action</th>
+					<th style="text-align:center;">#</th>
+					<th style="text-align:center;">Payroll for the month</th>
+					<th style="text-align:center;">Total Entries</th>
+					<th style="text-align:center;">Total Gross Pay</th>
+					<th style="text-align:center;">Total Deduction</th>
+					<th style="text-align:center;">Total Net Pay</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -46,16 +48,16 @@
 					foreach ($this->temppayroll as $row):
 						$my=$row['year']."-".$row['month'];
 						if(!$this->payrollObj->isPresent(array('month'=>$row['month'], 'year'=>$row['year']))):
-				?>
+						?>
 						<tr data-href="<?php echo $this->button(4, $my); ?>" >
-							<td><?php echo $i; ?> </td>
-							<td>
+							<td style="text-align:center;"><?php echo $i; ?> </td>
+							<td style="text-align:center;">
 								<strong><?php echo date("F, Y", strtotime("1-".$row['month']."-".$row['year'])); ?></strong> 
 								<span class='label label-danger'> Draft </span>
 							</td>
-							<td style="text-align:right"><?php echo $this->temppayrollObj->getCount(array('month'=>$row['month'], 'year'=>$row['year']));?></td>
-							<td style="text-align:right"><?php echo $this->currency($this->temppayrollObj->getSum(array('month'=>$row['month'], 'year'=>$row['year']),'gross'));?></td>
-							<td style="text-align:right">
+							<td style="text-align:center;"><?php echo $this->temppayrollObj->getCount(array('month'=>$row['month'], 'year'=>$row['year']));?></td>
+							<td style="text-align:center;"><?php echo $this->currency($this->temppayrollObj->getSum(array('month'=>$row['month'], 'year'=>$row['year']),'gross'));?></td>
+							<td style="text-align:center;">
 							    <?php 
 							        $deduction = $this->temppayrollObj->getSum(array('month'=>$row['month'], 'year'=>$row['year']),'total_deduction');
 							        $earning_dlwp = $this->temppayrollObj->getSum(array('month'=>$row['month'], 'year'=>$row['year']),'earning_dlwp');
@@ -64,22 +66,20 @@
 							        echo $this->currency($total_deduction);
 							    ?>
 							</td>
-							<td style="text-align:right"><?php echo $this->currency($this->temppayrollObj->getSum(array('month'=>$row['month'], 'year'=>$row['year']),'net_pay'));?></td>
-							<td><?php echo $this->button(1, $my);?></td>    
+							<td style="text-align:center;"><?php echo $this->currency($this->temppayrollObj->getSum(array('month'=>$row['month'], 'year'=>$row['year']),'net_pay'));?></td>
 						</tr>
-				<?php 
+				           <?php 
 							$i++; 	
 						endif;
 					endforeach; 
 					foreach ($this->payroll as $row):
-						$my=$row['year']."-".$row['month'];
-				?>
+						$my=$row['year']."-".$row['month'];?>
 						<tr data-href="<?php echo $this->button(4, $my); ?>" >
-							<td><?php echo $i; ?> </td>
-							<td><strong><?php echo date("F, Y", strtotime("1-".$row['month']."-".$row['year'])); ?></strong> </td>
-							<td style="text-align:right"><?php echo $this->payrollObj->getCount(array('month'=>$row['month'], 'year'=>$row['year']));?></td>
-							<td style="text-align:right"><?php echo $this->currency($this->payrollObj->getSum(array('month'=>$row['month'], 'year'=>$row['year']),'gross'));?></td>
-							<td style="text-align:right">
+							<td style="text-align:center;"><?php echo $i; ?> </td>
+							<td style="text-align:center;"><strong><?php echo date("F, Y", strtotime("1-".$row['month']."-".$row['year'])); ?></strong> </td>
+							<td style="text-align:center;"><?php echo $this->payrollObj->getCount(array('month'=>$row['month'], 'year'=>$row['year']));?></td>
+							<td style="text-align:center;"><?php echo $this->currency($this->payrollObj->getSum(array('month'=>$row['month'], 'year'=>$row['year']),'gross'));?></td>
+							<td style="text-align:center;">
 							    <?php 
 							        $deduction = $this->payrollObj->getSum(array('month'=>$row['month'], 'year'=>$row['year']),'total_deduction');
 							        $earning_dlwp = $this->payrollObj->getSum(array('month'=>$row['month'], 'year'=>$row['year']),'earning_dlwp');
@@ -88,13 +88,11 @@
 							        echo $this->currency($total_deduction);
 						        ?>
 					        </td>
-							<td style="text-align:right"><?php echo $this->currency($this->payrollObj->getSum(array('month'=>$row['month'], 'year'=>$row['year']),'net_pay'));?></td>
-							<td><?php echo $this->button(1, $my);?></td>    
+							<td style="text-align:center;"><?php echo $this->currency($this->payrollObj->getSum(array('month'=>$row['month'], 'year'=>$row['year']),'net_pay'));?></td>
 						</tr>
-				<?php 
+						<?php 
 						$i++;
-					endforeach;  
-				?>
+					endforeach;  ?>
 			</tbody>
 		</table>
 	</div>
@@ -109,6 +107,9 @@
 		}
 	});
 	$('document').ready(function(){
-		$('#dataTables').DataTable();
+		$('#dataTables').DataTable({
+			autoWidth: false
+		});
+		$('#dataTables').css('width', '100%');
 	});
 </script>

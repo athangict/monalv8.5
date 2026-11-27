@@ -15,7 +15,9 @@ use Administration\Model As Administration;
 use Stock\Model As Stock;
 use Sales\Model As Sales;
 use Purchase\Model As Purchase;
+use Store\Model As Store;
 use DateTime;
+use Laminas\Db\Sql\Sql;
 class SamController extends AbstractActionController
 {   
 	protected $_userloc;
@@ -1785,8 +1787,83 @@ class SamController extends AbstractActionController
 					'salesObj' 		=> $this->getDefinedTable(Sales\SalesTable::class),
 					'purchaseObj' 	=> $this->getDefinedTable(Purchase\PurchaseReceiptTable::class),
 					'dispatchObj' 	=> $this->getDefinedTable(Stock\DispatchTable::class),
+					'issueObj' 		=> $this->getDefinedTable(Store\IssueTable::class),
 					'priceObj' 		=> $this->getDefinedTable(Stock\PriceTable::class),
 		));
+	}
+
+	/**
+	 * Outward dispatch details for stock report
+	 */
+	public function outwarddispatchdetailsAction()
+	{
+		$this->init();
+		$start_date = $this->params()->fromQuery('start_date');
+		$end_date = $this->params()->fromQuery('end_date');
+		$location = (int)$this->params()->fromQuery('location', 0);
+		$item = (int)$this->params()->fromQuery('item', 0);
+
+		$details = array();
+		if($location > 0 && $item > 0 && $start_date != '' && $end_date != ''):
+			$adapter = $this->_container->get('Laminas\Db\Adapter\Adapter');
+			$sql = new Sql($adapter);
+			$select = $sql->select();
+			$select->from(array('d' => 'st_dispatch'))
+				->join(array('dd' => 'st_dispatch_details'), 'd.id = dd.dispatch', array('quantity', 'accepted_qty'))
+				->columns(array('id', 'challan_no', 'dispatch_date', 'to_location', 'status', 'movement_type' => new \Laminas\Db\Sql\Expression("'Dispatch'")))
+				->where->between('d.dispatch_date', $start_date, $end_date);
+			$select->where(array('d.from_location' => $location, 'dd.item' => $item, 'd.status' => array(3,4)))
+				->order(array('d.dispatch_date DESC', 'd.id DESC'));
+			$selectString = $sql->getSqlStringForSqlObject($select);
+			$dispatchDetails = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();
+
+			$issueDetailColumns = $adapter->query('SHOW COLUMNS FROM `in_issue_details`', $adapter::QUERY_MODE_EXECUTE)->toArray();
+			$issueDetailColumnNames = array();
+			foreach($issueDetailColumns as $issueDetailColumn):
+				if(isset($issueDetailColumn['Field'])):
+					$issueDetailColumnNames[] = $issueDetailColumn['Field'];
+				endif;
+			endforeach;
+			$issueQtyColumn = in_array('quantity', $issueDetailColumnNames) ? 'quantity' : (in_array('issue_qty', $issueDetailColumnNames) ? 'issue_qty' : 'issue_quantity');
+			$issueAcceptedColumn = in_array('accepted_quantity', $issueDetailColumnNames) ? 'accepted_quantity' : 'accepted_qty';
+
+			$issueSelect = $sql->select();
+			$issueSelect->from(array('i' => 'in_issue'))
+				->join(array('id' => 'in_issue_details'), 'i.id = id.issue', array('quantity' => $issueQtyColumn, 'accepted_qty' => $issueAcceptedColumn))
+				->columns(array(
+					'id',
+					'challan_no',
+					'dispatch_date' => new \Laminas\Db\Sql\Expression('i.issue_date'),
+					'to_location',
+					'status',
+					'movement_type' => new \Laminas\Db\Sql\Expression("'Issue'"),
+				))
+				->where->between('i.issue_date', $start_date, $end_date);
+			$issueSelect->where(array('i.from_location' => $location, 'id.item' => $item, 'i.status' => array(2,3,10)))
+				->order(array('i.issue_date DESC', 'i.id DESC'));
+			$issueSelectString = $sql->getSqlStringForSqlObject($issueSelect);
+			$issueDetails = $adapter->query($issueSelectString, $adapter::QUERY_MODE_EXECUTE)->toArray();
+
+			$details = array_merge($dispatchDetails, $issueDetails);
+			usort($details, function($a, $b){
+				if($a['dispatch_date'] == $b['dispatch_date']):
+					return ((int)$b['id']) - ((int)$a['id']);
+				endif;
+				return strcmp($b['dispatch_date'], $a['dispatch_date']);
+			});
+		endif;
+
+		$ViewModel = new ViewModel(array(
+			'details' => $details,
+			'location' => $location,
+			'item' => $item,
+			'start_date' => $start_date,
+			'end_date' => $end_date,
+			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+			'itemObj' => $this->getDefinedTable(Stock\ItemTable::class),
+		));
+		$ViewModel->setTerminal(True);
+		return $ViewModel;
 	}
 	/**
 	 * Get uom

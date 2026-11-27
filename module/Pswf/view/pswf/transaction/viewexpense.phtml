@@ -17,7 +17,13 @@ $current_flow = $this->flowtransactionObj->get(array('application'=>$row['id'], 
 $edit_option = 0;
 if(sizeof($current_flow) > 0){
 	foreach($current_flow as $current);
-	$edit_option = ($current['actor']==$login_role)?1:0;
+	$userRolesArray = explode(',', (string) $login_role);
+	$roleIds = array_map('intval', array_filter($userRolesArray, 'is_numeric'));
+	$isHighestRole = in_array(99, $roleIds, true) || in_array(100, $roleIds, true);
+	$hasCurrentAssignment = !empty($current['role_id'])
+		? (int) $current['role_id'] === (int) $login_id
+		: in_array((int) $current['actor'], $roleIds, true);
+	$edit_option = ($hasCurrentAssignment || $isHighestRole) ? 1 : 0;
 }
 ?>
 <div class="space"></div>
@@ -166,7 +172,7 @@ if(sizeof($current_flow) > 0){
 									<?php 
 									if(sizeof($current_flow) > 0): // && $edit_option
 										foreach($current_flow as $flow);
-										if($flow['actor']==$role):
+										if($edit_option === 1):
 										//echo '<pre>';print_r($current_flow);
 										$actions = explode('|', (string) $flow['action']);
 										for($i=0; $i < sizeof($actions); $i++):

@@ -2,7 +2,6 @@
 	$payroll = ($this->active == "payroll")?"active":"";
 	$pepf = ($this->active == "pepf")?"active":"";
 ?>
-<br/>
 <ul class="nav nav-tabs padding-18" id="myTab">	
 	<li class="<?php echo $payroll; ?>">
 		<a href="<?php echo $this->url('payroll', array('action' => 'index')); ?>" title="Payroll">

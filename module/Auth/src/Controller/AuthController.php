@@ -251,7 +251,7 @@ class AuthController extends AbstractActionController
 					   return $this->redirect()->toRoute('auth', array('action' => 'logout', 'id'=>'1'));	
 					}
                     if ($isFirstLogin) {
-                        $this->flashMessenger()->addMessage("warning^ This is your first login. Please change your password now.");
+                        $this->flashMessenger()->addMessage("warning^ This is your first login. Please update your password now.");
                         return $this->redirect()->toRoute('user', array('action' => 'changepwd'), array('query' => array('first_login' => '1')));
                     }
                     $this->flashMessenger()->addMessage("info^ Welcome,</br>You have successfully logged in!");
@@ -780,7 +780,7 @@ class AuthController extends AbstractActionController
                 $this->clear2faSession();
 
                 if ($isFirstLogin) {
-                    $this->flashMessenger()->addMessage("warning^ This is your first login. Please change your password now.");
+                    $this->flashMessenger()->addMessage("warning^ This is your first login. Please update your password now.");
                     return $this->redirect()->toRoute('user', ['action' => 'changepwd'], ['query' => ['first_login' => '1']]);
                 }
                 
@@ -966,7 +966,7 @@ class AuthController extends AbstractActionController
                 }
 
                 if ($isFirstLogin) {
-                    $this->flashMessenger()->addMessage("warning^ This is your first login. Please change your password now.");
+                    $this->flashMessenger()->addMessage("warning^ This is your first login. Please update your password now.");
                     return $this->redirect()->toRoute('user', ['action' => 'changepwd'], ['query' => ['first_login' => '1']]);
                 }
             }
@@ -1034,6 +1034,7 @@ class AuthController extends AbstractActionController
             'name'               => $userData['name'] ?? '',
             'preferred_username' => $userData['preferred_username'] ?? '',
             'email'              => $userData['email'] ?? '',
+            'mobile'             => $userData['mobile'] ?? ($userData['phone_number'] ?? ''),
         ];
 
         try {
@@ -1089,7 +1090,19 @@ class AuthController extends AbstractActionController
                 $userData['photo'] = $localUser['photo'] ?? '0';
                 $userData['sso_subject'] = $rawSubject;
             } else {
-                throw new \Exception('SSO account is not linked to any local user (uuid/email/username).');
+                $totalUsers = (int) $usersTable->getCount();
+                $localUser = $this->createInitialUserFromSso($usersTable, $userData, $rawSubject, ($totalUsers === 0));
+                $userData['id'] = $localUser['id'] ?? $userData['id'];
+                $userData['uuid'] = strtolower((string) ($localUser['uuid'] ?? $rawSubject));
+                $userData['name'] = (string) ($localUser['name'] ?? $userData['name']);
+                $userData['role'] = (string) ($localUser['role'] ?? (($totalUsers === 0) ? '100' : '2'));
+                $userData['location'] = $localUser['location'] ?? 1;
+                $userData['location_type'] = $localUser['location_type'] ?? 1;
+                $userData['admin_location'] = (string) ($localUser['admin_location'] ?? '1');
+                $userData['admin_activity'] = (string) ($localUser['admin_activity'] ?? '0');
+                $userData['mobile'] = $localUser['mobile'] ?? null;
+                $userData['photo'] = $localUser['photo'] ?? '0';
+                $userData['sso_subject'] = $rawSubject;
             }
 
             if (empty($userData['role'])) {
@@ -1255,5 +1268,142 @@ class AuthController extends AbstractActionController
     private function isUuidValue($value)
     {
         return (bool) preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', (string) $value);
+    }
+
+    private function createInitialUserFromSso(UsersTable $usersTable, array $ssoUserData, string $rawSubject, bool $isFirstUser): array
+    {
+        $name = trim((string) ($ssoUserData['name'] ?? ''));
+        if ($name === '') {
+            $name = trim((string) ($ssoUserData['preferred_username'] ?? ''));
+        }
+        if ($name === '') {
+            $name = trim((string) ($ssoUserData['email'] ?? ''));
+        }
+        if ($name === '') {
+            $name = 'SSO User';
+        }
+
+        $email = trim((string) ($ssoUserData['email'] ?? ''));
+        if ($email === '') {
+            $email = 'sso-bootstrap+' . date('YmdHis') . '@local.invalid';
+        }
+
+        $mobile = trim((string) ($ssoUserData['mobile'] ?? ''));
+        if (!preg_match('/^\d{8}$/', $mobile) || count($usersTable->get(['mobile' => $mobile])) > 0) {
+            $mobile = $this->generateSsoBootstrapMobile($usersTable);
+        }
+
+        $passwordPlugin = $this->password();
+        $salt = $passwordPlugin->generateDynamicSalt();
+        $staticSalt = $passwordPlugin->getStaticSalt();
+        $initialDefaultPassword = trim((string) ($this->config['initial_default_password'] ?? ''));
+        if ($initialDefaultPassword === '') {
+            throw new \RuntimeException('INITIAL_DEFAULT_PASSWORD must be configured in environment.');
+        }
+        $hashedPassword = $passwordPlugin->encryptPassword($staticSalt, $initialDefaultPassword, $salt);
+
+        $userPayload = [
+            'uuid' => $this->isUuidValue($rawSubject) ? strtolower($rawSubject) : '',
+            'cid' => 0,
+            'dob' => '1970-01-01',
+            'name' => $name,
+            'email' => $email,
+            'mobile' => $mobile,
+            'role' => $isFirstUser ? '100' : '2',
+            'location_type' => 1,
+            'region' => 1,
+            'location' => 1,
+            'admin_location' => '1',
+            'admin_activity' => '0',
+            'password' => $hashedPassword,
+            'salt' => $salt,
+            'status' => 1,
+            'photo' => '0',
+            'employee' => 0,
+            'credit_authority' => 0,
+            'last_accessed_ip' => '0.0.0.0',
+            'logins' => 0,
+            'author' => 1,
+            'created' => date('Y-m-d H:i:s'),
+            'modified' => date('Y-m-d H:i:s'),
+        ];
+
+        $savedUserId = (int) $usersTable->save($userPayload);
+        if ($savedUserId <= 0) {
+            throw new \Exception('Unable to create initial local user from SSO identity.');
+        }
+
+        $savedUsers = $usersTable->get($savedUserId);
+        if (empty($savedUsers)) {
+            throw new \Exception('Initial SSO user was created but could not be loaded.');
+        }
+        $savedUser = $savedUsers[0];
+        $mailSent = $this->sendSsoBootstrapCredentialsEmail($savedUser, $initialDefaultPassword);
+        if (!$mailSent) {
+            $this->flashMessenger()->addMessage(
+                'warning^ Local user was created from SSO. Email delivery failed, please use the default password: '
+                . $initialDefaultPassword
+            );
+        }
+
+        return $savedUser;
+    }
+
+    private function generateSsoBootstrapMobile(UsersTable $usersTable): string
+    {
+        for ($attempt = 0; $attempt < 25; $attempt++) {
+            $mobile = '1' . str_pad((string) random_int(0, 9999999), 7, '0', STR_PAD_LEFT);
+            if (count($usersTable->get(['mobile' => $mobile])) === 0) {
+                return $mobile;
+            }
+        }
+
+        throw new \Exception('Unable to generate a unique mobile number for initial SSO user.');
+    }
+
+    private function sendSsoBootstrapCredentialsEmail(array $user, string $plainPassword): bool
+    {
+        $email = trim((string) ($user['email'] ?? ''));
+        $name = trim((string) ($user['name'] ?? 'User'));
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || preg_match('/@local\.invalid$/i', $email)) {
+            return false;
+        }
+
+        $usernameHint = $email;
+        $mobile = trim((string) ($user['mobile'] ?? ''));
+        if ($mobile !== '') {
+            $usernameHint .= ' or ' . $mobile;
+        }
+
+        $message = "
+            <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>
+                <h2 style='color: #0f766e;'>Welcome!</h2>
+                <p>Dear {$name},</p>
+                <p>Your local account has been created from your SSO login. You can sign in locally with:</p>
+                <div style='background-color: #f3f4f6; padding: 15px; border-left: 4px solid #0f766e; margin: 20px 0;'>
+                    <p style='margin: 5px 0;'><strong>Username:</strong> {$usernameHint}</p>
+                    <p style='margin: 5px 0;'><strong>Password:</strong> {$plainPassword}</p>
+                </div>
+                <p>Please update your password after first login.</p>
+                <br>
+                <p>Best regards,<br>{$this->getApplicationNameForSubject()} Team</p>
+            </div>
+        ";
+
+        $mail = [
+            'email' => $email,
+            'name' => $name,
+            'subject' => $this->getApplicationNameForSubject() . ': Local Account Created',
+            'message' => $message,
+            'cc_array' => [],
+        ];
+
+        try {
+            $this->EmailPlugin()->sendmail($mail);
+            return true;
+        } catch (\Exception $e) {
+            return false;
+        }
     }
 }

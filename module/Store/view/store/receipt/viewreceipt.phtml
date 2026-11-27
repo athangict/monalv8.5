@@ -32,9 +32,7 @@
 					<input type="hidden" name="preceipt" id="preceipt" value="<?php echo $pr_id;?>" />
 					<div class="widget-toolbar hidden-xs">
 						<div class="btn-group">
-							<a class="btn btn-xs btn-danger" data-toggle="modal" data-target="#modal" href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "34-".$pr_id)); ?>" title="View Activity Logs">
-								<i class="ace-icon fa fa-plus bigger-120" ></i>  
-							</a> 
+							<?php echo $this->button(6, "34-".$pr_id, 0, 3);?> 
 							<a class="btn btn-xs" id="print" title="Print">
 								<i class="ace-icon fa fa-file-pdf-o bigger-120"></i>
 							</a>

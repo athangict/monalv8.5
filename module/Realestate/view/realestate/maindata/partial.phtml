@@ -2,7 +2,6 @@
   $building = ($this->active == "building")?"active":"";
   $floor = ($this->active == "floor")?"active":"";
 ?>
-<br/>
 <ul class="nav nav-tabs padding-18" id="myTab" >
 	<li class="<?php echo $building; ?>">
 		<a href="<?php echo $this->url('rsdata', array('action' => 'index')); ?>">

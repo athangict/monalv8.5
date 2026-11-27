@@ -21,60 +21,65 @@ foreach($flat as $flats);
 				<div class="widget-body">
 					<div class="widget-main padding-24">
 					    <div class="row">
-						<input type="hidden" class="form-control" name="flat_id" id="flat_id" value="<?php echo $flats['id'];?>" />
-						<input type="hidden" class="form-control" name="rent" id="rent" value="<?php echo $flats['rent'];?>" />
-						<input type="hidden" class="form-control" name="building" id="building" value="<?php echo $flats['building'];?>" />
-						<div class="form-group col-lg-4">
-								<label for="tenants" class="control-label">Lesse name </label>
-								<select name="tenants" id="tenants" >
-								<option value=""></option>
-								<?php foreach($tenants as $tenant):?>
-								<option value="<?php echo $tenant['id'];?>">
-								<?php echo $tenant['name'] ." ". '(' . $tenant['code'] . ')';?>
-								</option>
-								<?php endforeach;?>
+							<input type="hidden" class="form-control" name="flat_id" id="flat_id" value="<?php echo $flats['id'];?>" />
+							<input type="hidden" class="form-control" name="building" id="building" value="<?php echo $flats['building'];?>" />
+					    	<div class="form-group col-lg-3">
+								<label for="tenants" class="control-label">Lesse name</label>
+								<select class="form-control" name="tenants" id="tenants">
+									<option value=""></option>
+									<?php foreach($tenants as $tenant):?>
+										<option value="<?php echo $tenant['id'];?>">
+											<?php echo $tenant['name'] ." ". '(' . $tenant['code'] . ')';?>
+										</option>
+									<?php endforeach;?>
 								</select>
 							</div>
-							<div class="form-group col-lg-4">
+							<div class="form-group col-lg-3">
 								<label for="cid" class="control-label">Cid No.</label>
 								<input type="text" class="form-control" name="cid" id="cid" />
 							</div>
-							<div class="form-group col-lg-4">
+							<div class="form-group col-lg-3">
 								<label for="contact" class="control-label">Contact No.</label>
 								<input type="text" class="form-control" name="contact" id="contact" style="text-transform: capitalize;" />
 							</div>
-							<br><br><br><br><br><br><br>
-						<div class="form-group col-lg-4">
-								<label for="agreement_date" class="control-label">Agrement_date</label>
-								<div class="date input-group" id="agreement_date" data-date="<?php echo date('Y-m-d');?>" data-date-format="yyyy-mm-dd" >
-										<input class="form-control span2" name="agreement_date" id="agreement_date" type="text" placeholder="End Date" value="<?php echo date('Y-m-d');?>"  required>
-										<span class="input-group-addon add-on"><i class="fa fa-calendar"></i></span>
-									</div>
+							<div class="form-group col-lg-3">
+								<label for="rent" class="control-label">Rent</label>
+								<input type="text" class="form-control" name="rent" id="rent" value="<?php echo $flats['rent'];?>" readonly />
 							</div>
-					
-						<div class="form-group col-lg-4">
-								<label for="start_date" class="control-label">Start_date</label>
-								    <div class="date input-group" id="start_date" data-date="<?php echo date('Y-m-d');?>" data-date-format="yyyy-mm-dd" >
-										<input class="form-control span2" name="start_date" id="start_date" type="text" placeholder="Start Date" value="<?php echo date('Y-m-d');?>"  required>
-										<span class="input-group-addon add-on"><i class="fa fa-calendar"></i></span>
-									</div>
-							</div>	
-						<div class="form-group col-lg-4">
-								<label for="end_date" class="control-label">End_date</label>
-								<div class="date input-group" id="end_date" data-date="<?php echo date('Y-m-d');?>" data-date-format="yyyy-mm-dd" >
-										<input class="form-control span2" name="end_date" id="end_date" type="text" placeholder="End Date" value="<?php echo date('Y-m-d');?>" required>
-										<span class="input-group-addon add-on"><i class="fa fa-calendar"></i></span>
-									</div>
-							</div>
-							<br><br><br><br><br><br><br>
-								<div class="form-group col-lg-4">
-									<label for="remarks" class="control-label"> Remarks</label>
-									<textarea id='remarks' name='remarks' rows='3' cols='65'></textarea>
+						</div>
+						<div class="row">
+							<div class="form-group col-lg-3">
+								<label for="agreement_date" class="control-label">Agreement Date</label>
+								<div class="input-group">
+									<input class="form-control" name="agreement_date" id="agreement_date" type="text" placeholder="Agreement Date" value="<?php echo date('Y-m-d');?>" required>
+									<span class="input-group-addon add-on"><i class="fa fa-calendar"></i></span>
 								</div>
-
 							</div>
-									<button type="submit" class="btn btn-success"><i class="fa fa-check"></i> Save </button>
-									<button type="button" class="btn btn-warning" onclick="javascript:history.back();"><i class="fa fa-times"></i> Cancel </button>
+							<div class="form-group col-lg-3">
+								<label for="start_date" class="control-label">Start Date</label>
+								<div class="input-group">
+									<input class="form-control" name="start_date" id="start_date" type="text" placeholder="Start Date" value="<?php echo date('Y-m-d');?>" required>
+									<span class="input-group-addon add-on"><i class="fa fa-calendar"></i></span>
+								</div>
+							</div>
+							<div class="form-group col-lg-3">
+								<label for="end_date" class="control-label">End Date</label>
+								<div class="input-group">
+									<input class="form-control" name="end_date" id="end_date" type="text" placeholder="End Date" value="<?php echo date('Y-m-d');?>" required>
+									<span class="input-group-addon add-on"><i class="fa fa-calendar"></i></span>
+								</div>
+							</div>
+							<div class="form-group col-lg-3">
+								<label for="remarks" class="control-label">Remarks</label>
+								<textarea id="remarks" name="remarks" rows="1" class="form-control"></textarea>
+							</div>
+						</div>
+						<div class="row">
+							<div class="col-lg-12">
+								<button type="submit" class="btn btn-success"><i class="fa fa-check"></i> Save </button>
+								<button type="button" class="btn btn-warning" onclick="javascript:history.back();"><i class="fa fa-times"></i> Cancel </button>
+							</div>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -85,28 +90,50 @@ foreach($flat as $flats);
 
 <script type="text/javascript">
     $(function() {
-	$('#agreement_date').datepicker();
-	$('#start_date').datepicker();
-	$('#end_date').datepicker();
-		$('#location').on('change', function(){
-			$location_id = $(this).val(),
-			//alert($location_id);
-			$.post(
-				"<?php echo $this->url('realestate', array('action' => 'getLeasedGodown')); ?>",
-				{
-					location_id: $location_id,
-				},
-				function(data){
-					console.log(data);
-					$('#storage_type').html(data.leaseditem);
-					$('#storage_type').trigger('chosen:updated');
-					$('form').formValidation('revalidateField','storage_type');
-				},
-				'json'
-			);
-		});
+		function normalizeDateValue(value) {
+			if (!value) {
+				return value;
+			}
+			var dash = /^(\d{4})-(\d{2})-(\d{2})$/;
+			if (dash.test(value)) {
+				return value;
+			}
+			var slash = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/;
+			var m = value.match(slash);
+			if (!m) {
+				return value;
+			}
+			var d = ('0' + m[1]).slice(-2);
+			var mo = ('0' + m[2]).slice(-2);
+			var y = m[3];
+			if (y.length === 2) {
+				y = '20' + y;
+			}
+			return y + '-' + mo + '-' + d;
+		}
 
+		function initTenantDate(selector) {
+			var $el = $(selector);
+			$el.val(normalizeDateValue($.trim($el.val())));
+			if ($el.data('datepicker')) {
+				$el.datepicker('destroy');
+			}
+			$el.datepicker({
+				format: 'yyyy-mm-dd',
+				autoclose: true,
+				startView: 0,
+				minViewMode: 0,
+				maxViewMode: 2,
+				forceParse: false,
+				container: 'body'
+			}).on('changeDate', function () {
+				$el.val(normalizeDateValue($.trim($el.val())));
+			});
+		}
 
+		initTenantDate('#agreement_date');
+		initTenantDate('#start_date');
+		initTenantDate('#end_date');
 	});
 	$('form select').chosen();
 	$('document').ready(function(){
@@ -150,10 +177,10 @@ foreach($flat as $flats);
 						}
 					}
 				},
-				agrement_date: {
+				agreement_date: {
 					validators: {
 						notEmpty: {
-							message: 'Please provide agrement_date.'
+							message: 'Please provide agreement_date.'
 						},
 						numeric:{
 							message: 'Enter a Figure Value'
@@ -194,7 +221,7 @@ foreach($flat as $flats);
 				$('div#'+ e.field.replace('[]','') +'_chosen').addClass('is-valid');
 			} else {
 				$('div#'+ e.field.replace('[]','') +'_chosen').removeClass('is-valid');
-				$('div#'+ e.field.replace('[]','') +'_chosen').addClass('is-i                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               nvalid');
+				$('div#'+ e.field.replace('[]','') +'_chosen').addClass('is-invalid');
 			}
 		});
 	});

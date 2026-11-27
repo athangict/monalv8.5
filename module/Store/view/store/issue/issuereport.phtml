@@ -128,13 +128,25 @@ TD{font-size:8pt;}
 						  <td><?php echo $this->locationObj->getColumn($row['from_location'],'location'); ?></td>
 						  <td><?php echo $this->locationObj->getColumn($row['to_location'],'location'); ?></td>
 						  <td><?php echo $this->itemObj->getColumn($row['item'],'code'); ?></td>
-						  <td><?php echo ($this->itemObj->getColumn($row['item'],'item_group') == 1)?$this->assetObj->getColumn($row['assetssp'],'asset'):$this->assetsspObj->getColumn($row['assetssp'],'storespare');?></td>
+						  <td>
+						  	<?php
+						  		$assetRef = '-';
+						  		$assetSspId = isset($row['assetssp']) ? (int)$row['assetssp'] : 0;
+						  		if($assetSspId > 0):
+						  			$assetRef = ($this->itemObj->getColumn($row['item'],'item_group') == 1)
+						  				? $this->assetObj->getColumn($assetSspId,'asset')
+						  				: $this->assetsspObj->getColumn($assetSspId,'storespare');
+						  			$assetRef = ($assetRef === '' || $assetRef === null) ? '-' : $assetRef;
+						  		endif;
+						  		echo $assetRef;
+						  	?>
+						  </td>
 						  <td><?php echo $this->uomObj->getColumn($row['uom'],'code'); ?></td>
 						  <td><?php echo number_format($row['quantity'], 2, '.', ','); ?></td>
-						  <td><?php echo number_format($row['accepted_quantity'], 2, '.', ','); ?></td>
-						  <td><?php echo number_format($row['sound_quantity'], 2, '.', ','); ?></td>
-						  <td><?php echo number_format($row['damaged_quantity'], 2, '.', ','); ?></td>
-						  <td><?php echo number_format($row['shortage_quantity'], 2, '.', ','); ?></td>
+						  <td><?php echo number_format((float)(isset($row['accepted_quantity']) ? $row['accepted_quantity'] : 0), 2, '.', ','); ?></td>
+						  <td><?php echo number_format((float)(isset($row['sound_quantity']) ? $row['sound_quantity'] : 0), 2, '.', ','); ?></td>
+						  <td><?php echo number_format((float)(isset($row['damaged_quantity']) ? $row['damaged_quantity'] : 0), 2, '.', ','); ?></td>
+						  <td><?php echo number_format((float)(isset($row['shortage_quantity']) ? $row['shortage_quantity'] : 0), 2, '.', ','); ?></td>
 						  <td><?php echo $row['vehicle_no']; ?></td>
                                                   <td><?php echo number_format($row['amount'],2,'.',','); ?></td>
 					</tr>

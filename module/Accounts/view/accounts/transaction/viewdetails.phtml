@@ -30,7 +30,9 @@
 			<?php if($canRevokeVoucher && (int)$status !== $revokedStatusId): ?>
 			<div class="widget-toolbar no-border hidden-xs voucher-detail-revoke">
 				<div class="btn-group">
-					<?php echo $this->button(3, $page); ?>
+					<a class="voucher-header-action btn btn-xs btn-danger" data-toggle="modal" data-target="#modal" href="<?php echo $this->url('transaction', array('action' => 'revokevoucher', 'id' => $page)); ?>" title="Revoke Voucher">
+						<i class="ace-icon fa fa-times"></i>
+					</a>
 				</div>
 			</div>
 			<?php endif; ?>

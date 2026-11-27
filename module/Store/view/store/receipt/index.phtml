@@ -102,9 +102,7 @@
 							<td><?php echo $this->poObj->getColumn($row['purchase_order'],'purchase_order_no')?></td>
 							<td class="action">
 								<div class="btn-group">
-									<a data-toggle="modal" data-target = "#modal" class="btn btn-xs btn-danger" href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "2-".$row['id'])); ?>" title="View Activity Logs">
-										<i class="ace-icon fa fa-plus bigger-120" ></i>  
-							  		</a>
+									<?php echo $this->button(6, "2-".$row['id'], 0, 3);?>
 							  	</div>
 							</td>	
 						</tr>

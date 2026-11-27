@@ -184,7 +184,7 @@ class LeasedRentTable extends AbstractTableGateway
 		$sql = new Sql($adapter);
 		$select = $sql->select();
 		$select->from(array('lr'=>$this->table))
-		->join(array('b'=>'rs_building'), 'lr.building = b.id');
+		->join(array('b'=>'rs_building'), 'lr.building = b.id', array(), Select::JOIN_LEFT);
 		if($where!=NULL){
 			$select->where($where);
 		}
@@ -250,14 +250,22 @@ class LeasedRentTable extends AbstractTableGateway
 	 */
 		public function getrentlist($param)
 	{
-		$where = ( is_array($param) )? $param: array('lr.id' => $param);
+			if (is_array($param)) {
+				$where = $param;
+			} elseif ($param === null || $param === '' || $param === '-1') {
+				$where = array();
+			} else {
+				$where = array('lr.id' => $param);
+			}
 		$adapter = $this->adapter;
 		$sql = new Sql($adapter);
 		$select = $sql->select();
 		$select->from(array('lr'=>$this->table))
 		->join(array('b'=>'rs_building'), 'lr.building = b.id')
-		->join(array('bm'=>'rs_building_master'), 'b.asset = bm.id')
-		       ->where($where);
+			->join(array('bm'=>'rs_building_master'), 'b.asset = bm.id');
+			if(!empty($where)){
+				$select->where($where);
+			}
 		
 		$selectString = $sql->getSqlStringForSqlObject($select);
 		$results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();

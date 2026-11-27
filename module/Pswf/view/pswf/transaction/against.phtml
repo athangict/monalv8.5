@@ -83,8 +83,7 @@ $minYear = date('Y', strtotime($minYear)); ?>
 			<tbody>
 				<?php $i=1+(($page-1)*25); foreach ($paginator as $row):
 				// echo '<pre>';print_r($paginator);exit;//
-				if($role==100 ||$role==99 ||$role==5||$role==6)://role 3,99,100 should be given access
-					if($row['voucher_id']==9):?>
+				if($row['voucher_id']==9):?>
 						<tr data-href="<?php echo $this->button(4,$row['id']); ?>">
 							<td><?php echo $i++; ?> </td>
 							<td>
@@ -101,31 +100,8 @@ $minYear = date('Y', strtotime($minYear)); ?>
 								endif;?>
 							</td>
 						</tr>
-				    <?php 
-				    endif;
-				elseif(($role==2 || $role==8) && $user==$row['author'] ):
-				if($row['voucher_id']==9)://2==credit Voucher?>
-						<tr data-href="<?php echo $this->button(4,$row['id']); ?>">
-							<td><?php echo $i++; ?> </td>
-							<td> 
-								<b><?php echo $row['voucher_no'];?>&nbsp;</b> 
-								<span style="color:#666;font-size:95%;"><?php echo $row['voucher_date'];?></span>
-								<span class="label label-info"><?php echo $row['voucher_type'];?> voucher</span>
-								<?php echo $this->status($row['status']);?>
-							</td>
-							<td>
-								<?php 
-								if($row['voucher_id'] == 15):
-									echo"<span class='label label-info'> Opening Balance </span>";
-								else:
-									echo $this->currency($row['voucher_amount']);
-								endif;?>
-							</td>
-						</tr>
-				    <?php 
-				    endif;
-				endif;
-				endforeach;//exit;?>
+				<?php endif;
+				endforeach;?>
 			</tbody>
 		</table>
 	</div>
@@ -144,4 +120,3 @@ $minYear = date('Y', strtotime($minYear)); ?>
 		orentation:"P",//L =landscape, P = potrait
 	});
 </script>
-

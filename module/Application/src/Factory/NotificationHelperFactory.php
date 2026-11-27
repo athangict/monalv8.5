@@ -29,7 +29,7 @@ class NotificationHelperFactory implements FactoryInterface
      * @param null|array $options
      * @return Getresourcehelper
      */
-    public function __invoke(ContainerInterface $container, $requestedName, array $options = null)
+    public function __invoke(ContainerInterface $container, $requestedName, ?array $options = null)
     {
         $class = $requestedName ? '\\' .$requestedName : NotificationHelper::class;
         $Table = $container->get(NotifyTable::class);
@@ -41,5 +41,4 @@ class NotificationHelperFactory implements FactoryInterface
     }
 
 }
-
 

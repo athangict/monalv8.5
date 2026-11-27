@@ -45,9 +45,7 @@
 				</div>
 				<div class="widget-toolbar hidden-xs">
 				 <div class="btn-group">
-					<a class="btn btn-xs btn-danger" data-toggle="modal" data-target="#modal" href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "11-".$issue_id)); ?>" title="View Activity Logs">
-						<i class="ace-icon fa fa-plus bigger-120" ></i>  
-					</a> &nbsp;|
+					<?php echo $this->button(6, "11-".$issues_id, 0, 3);?> &nbsp;|
 					</div>
 					<a style='cursor:pointer' id="print">
 						<i class="ace-icon fa fa-file-pdf-o red"></i>
@@ -74,9 +72,9 @@
 									</li>
 									<li>
 										<i class="ace-icon fa fa-caret-right blue"></i>
-										<b>Name of Driver : </b><?php echo $this->employeeObj->getColumn($fcb_transport,'full_name'); ?> 
+										<b>Issue To Employee : </b><?php echo $this->employeeObj->getColumn($received_by,'full_name'); ?> 
 									</li>
-									<?php if($dispatch_status == 3 || $dispatch_status == 4 || $dispatch_status == 10):?>
+									<?php if($issue_status == 3 || $issue_status == 4 || $issue_status == 10):?>
 									<li>
 										<i class="ace-icon fa fa-caret-right blue"></i>
 							 			 <b>Received By : </b><?php echo $this->employeeObj->getColumn($received_by,'full_name');?>
@@ -154,28 +152,27 @@
 									<?php
 									    $i= 1;
 										$issue_details = $this->issue_detailsObj->get(array('issue'=>$issues_id)); 
+										if(sizeof($issue_details) == 0):
+									?>
+											<tr>
+												<td colspan="<?php echo ($issue_status == 3 || $issue_status == 4 || $issue_status == 10) ? 12 : 8; ?>" class="text-center">No issue details found.</td>
+											</tr>
+									<?php
+										else:
 											foreach($issue_details as $tdrow):
-											//echo "<pre>"; print_r($tdrow); exit;
+											$assetssp = '-';
+											if((int)$tdrow['assetssp'] > 0):
+												if($item_group == 1):
+													$assetssp = $this->assetObj->getColumn($tdrow['assetssp'],'asset');
+												else:
+													$assetssp = $this->sspObj->getColumn($tdrow['assetssp'],'storespare');
+												endif;
+											endif;
+											$assetssp = ($assetssp == '') ? '-' : $assetssp;
 					 				?>	
 											<tr>
 											    <td><?php echo $i++;?></td>
 												<td><?php echo $tdrow['item'];?></td>
-												<?php
-													$selected_item = $this->itemObj->get($tdrow['item_id']);
-													foreach($selected_item as $item):
-														
-														if($item['item_group_id']==1):
-															$assetssp = $this->assetObj->getColumn($tdrow['assetssp'],'asset');
-															$from_quantity = $this->asset_detailsObj->getColumn(array('asset'=>$tdrow['assetssp'],'location'=>$from_location),'quantity');
-															$to_quantity = $this->asset_detailsObj->getColumn(array('asset'=>$tdrow['assetssp'],'location'=>$to_location),'quantity');
-															
-														else: 
-															$assetssp = $this->sspObj->getColumn($tdrow['assetssp'],'storespare');
-															$from_quantity = $this->ssp_detailsObj->getColumn(array('storespare'=>$tdrow['assetssp'],'location'=>$from_location),'quantity');
-															$to_quantity = $this->ssp_detailsObj->getColumn(array('storespare'=>$tdrow['assetssp'],'location'=>$to_location),'quantity');
-															
-														endif;
-												?>
 												<td><?php echo $assetssp;?></td>
 												<td><?php echo $this->uomObj->getColumn($tdrow['uom'],'code');?></td>
 												<td><?php echo $tdrow['quantity'];?></td>
@@ -190,7 +187,7 @@
 
 												<td><?php echo $tdrow['remarks'];?></td>
 											</tr>
-										<?php endforeach; endforeach; ?>
+										<?php endforeach; endif; ?>
 									</tbody>
 								</table>
 							</div>
@@ -217,7 +214,7 @@
 								<a href="<?php echo $this->url('inissue', array('action'=>'pendingissue', 'id'=>$issues_id));?>" class="btn btn-warning" data-toggle="modal" data-target="#modal"> <i class="fa fa-plane"></i> Issue </a>
 							<?php elseif(($issue_status == '2'|| $issue_status == '10') && sizeof($depoyManager)>0):?>
 								<?php if($user_location == $from_location && $issue_status != '10'): ?>
-									<a class="btn btn-primary" data-tooltip="tooltip" data-toggle="modal" data-target="#modal" data-placement="top" title="Revice" href="<?php echo $this->url('inissue', array('action'=>'reviceissue', 'id'=>$issue_id));?>" >
+									<a class="btn btn-primary" data-tooltip="tooltip" data-toggle="modal" data-target="#modal" data-placement="top" title="Revice" href="<?php echo $this->url('inissue', array('action'=>'reviceissue', 'id'=>$issues_id));?>" >
 										<i class="fa fa-pencil-square-o"></i> Revise </a>
 									</a>
 								<?php endif;?>

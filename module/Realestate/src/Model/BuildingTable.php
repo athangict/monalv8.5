@@ -250,15 +250,30 @@ class BuildingTable extends AbstractTableGateway
 		$sql = new Sql($adapter);
 	    $select = $sql->select();
 		$select->from(array('b'=>$this->table))
-		       ->join(array('a'=>'rs_building_master'), 'b.asset = a.id');
+			   ->columns(array(
+				   'id',
+				   'block',
+				   'asset',
+				   'plot_no',
+				   'house_no',
+				   'tot_floor',
+				   'thram_no',
+				   'location' => new Expression('COALESCE(a.location, bm.location, b.location)'),
+				   'region' => new Expression('COALESCE(a.region, bm.region)'),
+				   'name' => new Expression('COALESCE(a.name, bm.name)'),
+				   'building_id' => new Expression('COALESCE(a.assetid, bm.building_id)'),
+				   'custodian' => new Expression('COALESCE(a.custodian, bm.custodian)'),
+			   ))
+		       ->join(array('a'=>'ast_asset'), 'b.asset = a.id', array(), Select::JOIN_LEFT)
+		       ->join(array('bm'=>'rs_building_master'), 'b.asset = bm.id', array(), Select::JOIN_LEFT);
 		if($data['region'] != '-1'){
-			$select->where(array('region'=>$data['region']));
+			$select->where('COALESCE(a.region, bm.region) = '.(int)$data['region']);
 		}
 		if($data['location'] != '-1'){
-			$select->where(array('a.location'=>$data['location']));
+			$select->where('COALESCE(a.location, bm.location, b.location) = '.(int)$data['location']);
 		}
 		if($data['block'] != '-1'){
-			$select->where(array('block'=>$data['block']));
+			$select->where(array('b.block'=>(int)$data['block']));
 		}
 		
 	    $selectString = $sql->getSqlStringForSqlObject($select);

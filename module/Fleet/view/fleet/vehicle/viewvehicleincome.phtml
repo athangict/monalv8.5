@@ -18,28 +18,37 @@
 	.mytable tr th,.mytable tr td {
 		padding:5px;
 	}
+	.income-detail-header {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 4px 12px;
+	}
+	.income-detail-actions {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin-left: auto;
+		padding: 4px 10px;
+	}
 </style>
 <div class="row">
 	<div class="col-lg-12">
 		<div class="widget widget-box">
 			<form method="post" action="<?php echo $this->url('vehicle', array('action' => 'viewvehicleincome')); ?>" >
-				<div class="widget-header">
+				<div class="widget-header income-detail-header">
 					<h5 class="widget-title lighter smaller">
 						# Transport Income Details:<strong>&nbsp;&nbsp;<?php echo $location; ?> | <?php //echo $supplier; ?> | <?php //echo $cost_center ?></strong>&nbsp;
 						<?php $this->status($status);?>
 					</h5>
-					<div class="widget-toolbar hidden-xs">
-							<button type="button" id="rm_btn" class="btn btn-white btn-warning btn-bold btn-xs"><i class="fa fa-plus"></i> <a href="<?php echo $this->url('vehicle', array('action'=>'addvehicleincome'));?>"> Add Vehicle Income</a></button>
-					</div>
-					<div class="widget-toolbar hidden-xs">
-						<div class="btn-group">
-							<a class="btn btn-xs btn-danger" data-toggle="modal" data-target="#modal" href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "30-".$rm_id )); ?>" title="View Activity Logs">
-								<i class="ace-icon fa fa-plus bigger-120" ></i>  
-							</a> 
-							<a class="btn btn-xs" id="print" title="Print">
-								<i class="ace-icon fa fa-file-pdf-o bigger-120"></i>
-							</a>
-						</div>
+					<div class="income-detail-actions hidden-xs">
+						<a class="btn btn-white btn-warning btn-bold btn-xs" href="<?php echo $this->url('vehicle', array('action'=>'addvehicleincome'));?>">
+							<i class="fa fa-plus"></i> Add Vehicle Income
+						</a>
+						<?php echo $this->button(6, '30-'.$rm_id, 0, 3);?>
+						<a class="btn btn-xs" id="print" title="Print">
+							<i class="ace-icon fa fa-file-pdf-o bigger-120"></i>
+						</a>
 					</div>
 				</div>
 			</form>
@@ -146,8 +155,8 @@
 											?>
 											<tr>
 												<td><?php echo $sl++; ?></td>
-												<td><?php echo $this->serviceObj->getColumn($tdrow['service'],'code');?></td>
-												<td><?php echo $this->vehicleObj->getColumn($tdrow['service_item'],'name');?></td>
+												<td><?php echo trim($this->serviceObj->getColumn($tdrow['service'],'code').'-'.$this->serviceObj->getColumn($tdrow['service'],'name'), '-');?></td>
+												<td><?php echo trim($this->vehicleObj->getColumn($tdrow['service_item'],'code').'-'.$this->vehicleObj->getColumn($tdrow['service_item'],'name'), '-');?></td>
 												<td><?php echo $tdrow['amount'];?></td>
 											</tr>
 										<?php endforeach;?>
@@ -199,9 +208,6 @@
 	</div>
 </div>
 <script type="text/javascript">
-	$('#rm_btn').on('click',function(){
-		window.document.location = "<?php echo $this->url('vehicle', array('action' => 'addrepair'));?>";
-	});
 	$('#print').genpdfinvoice({
 		content: '#report-print',
 		src:"<?php echo $this->url('pdfxls', array('action' => 'pdf'));?>",

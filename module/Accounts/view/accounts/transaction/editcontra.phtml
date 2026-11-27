@@ -21,8 +21,8 @@
             <div class="widget-body">
 				<div class="widget-main">
 					<form id="#form" method="post" action="<?php echo $this->url('transaction', array('action' => 'editcontra','id' => $id)); ?>"  enctype="multipart/form-data" >    
-						<div class="row"> 
-							<div class="col-lg-4">    
+						<div class="account-entry-header">
+							<div class="account-entry-header-field">
 							    <input type="hidden" name="created_author" id="created_author" value="<?php echo $author;?>">
 								<div class="form-group">
 									<label for="voucher_date" class="control-label">Voucher Date</label>
@@ -32,56 +32,57 @@
 									</div>
 								</div>
 							</div>
-							<div class="col-lg-4">
+							<div class="account-entry-header-field">
 								<div class="form-group">
 									<label for="voucher_type">Voucher Type</label>
 									<select id="voucher_type" name="voucher_type" class="form-control " data-placeholder="Select"  required>
 										<option value=""></option>
-										<?php 
+										<?php
 										foreach ($journals as $journal):
 											$selected =($voucher_id==$journal['id'])? 'selected':'';
 										?>
 											<option value="<?php echo $journal['id'];?>" <?php echo $selected;?>>
 												<?php echo $journal['journal']; ?>
 											</option>
-										<?php 
+										<?php
 										endforeach;
 										?>
 									</select>
 								</div>
 							</div>
-							<div class="col-lg-4">
-								<div class="form-group">
-									<label for="doc_id">Document ID</label>
-									<input type="text" class="form-control" name="doc_id" id="doc_id" value="<?php echo $doc_id;?>" > 
-								</div> 
-							</div>
-						</div>
-						<div class="row">
-							<div class="col-lg-4">
-								<div class="form-group">
-									<label for="doc_type">Document Type</label>
-									<input type="text" class="form-control" name="doc_type" id="doc_type" value="<?php echo $doc_type;?>" > 
-								</div>
-							</div>
-							
-							<div class="col-lg-4">
-								<div class="form-group">
-									<label for="voucher_amount">Voucher Amount</label>
-									<input type="text" class="form-control" name="voucher_amount" id="voucher_amount" value="<?php echo $voucher_amount;?>" required  readonly > 
-								</div>
-							</div>
-                            <div class="col-lg-4">
+							<div class="account-entry-header-field">
 								<div class="form-group">
 									<label for="cheque_no1">Checque No.</label>
-									<input type="text" class="form-control" name="cheque_no1" id="cheque_no1" value="<?php echo $cheque_no;?>"> 
+									<input type="text" class="form-control" name="cheque_no1" id="cheque_no1" value="<?php echo $cheque_no;?>">
 								</div>
-							</div>							
+							</div>
+							<div class="account-entry-header-field account-entry-document-field">
+								<div class="form-group">
+									<label for="doc_id">Document ID</label>
+									<input type="text" class="form-control" name="doc_id" id="doc_id" value="<?php echo $doc_id;?>" >
+								</div>
+							</div>
+							<div class="account-entry-header-field account-entry-document-field">
+								<div class="form-group">
+									<label for="doc_type">Document Type</label>
+									<input type="text" class="form-control" name="doc_type" id="doc_type" value="<?php echo $doc_type;?>" >
+								</div>
+							</div>
+							<div class="account-entry-header-field account-entry-amount-field">
+								<div class="form-group">
+									<label for="voucher_amount">Voucher Amount</label>
+									<input type="text" class="form-control" name="voucher_amount" id="voucher_amount" value="<?php echo $voucher_amount;?>" required  readonly >
+								</div>
+							</div>
 						</div>
 						<div class="row">
-							<div class="col-lg-12"> 
+							<div class="col-lg-12">
 								<label>Transaction Details</label>
-								<table id="trdetails_table" class="table small-padding form-table">
+								<table id="trdetails_table" class="table small-padding form-table account-entry-details">
+										<colgroup>
+											<col span="5">
+											<col class="transaction-action-column">
+										</colgroup>
 									<thead>
 										<tr>
 											<th>Location</th>
@@ -99,25 +100,25 @@
 										$total_credit = 0;
 										foreach($this->tdetailsObj->get(array('td.transaction'=>$id, 'td.type' => 2)) as $tdetail2): // type=2 system generated data ?>
 											<tr>
-												<td class="col-lg-2">
+												<td>
 													<?php echo $tdetail2['location']; ?>
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<?php echo $tdetail2['head'];?>
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<?php echo $tdetail2['sub_head']; ?>
 												</td>
-												<td class='col-lg-2' >
+												<td>
 													<?php echo $tdetail2['bank_ref_no'];?>        
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<?php 
 														echo $tdetail2['debit'];
 														$total_debit += $tdetail2['debit'];
 													?>      
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<?php 
 														echo $tdetail2['credit'];
 														$total_credit += $tdetail2['credit'];
@@ -128,7 +129,7 @@
 										<?php endforeach;
 										foreach($this->tdetailsObj->get(array('td.transaction'=>$id, 'td.type' => 1)) as $tdetail1): // type=1 user inputted data ?>
 											<tr>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<input type="hidden" id="id" name="id[]" value="<?php echo $tdetail1['id'];?>"/>
 														<select id="location" name="location[]" class="form-control" data-placeholder="Select" required >
@@ -138,9 +139,10 @@
 															?>
 																<optgroup label="<?php echo $region_row['region'];?>">
 																	<?php 
-																		$locations = $locationObj->get(array('region'=>$region_row['id']));
+																		$locations = $entryLocations;
 																		  
 																		foreach ($locations as $location_row):
+																		if ((int) $location_row['region'] !== (int) $region_row['id']) continue;
 																			$selected_loc =($location_row['id']== $tdetail1['location_id'])?'selected':'';
 																	?>
 																		<option value="<?php echo $location_row['id']; ?>" <?php echo $selected_loc;?>>
@@ -156,7 +158,7 @@
 														</select>
 													</div>
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<select id="head" name="head[]" class="form-control tr_head" data-placeholder="Select" required>
 															<option value=""></option>
@@ -171,7 +173,7 @@
 														</select>
 													</div>
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<select id="sub_head" name="sub_head[]" class="form-control" data-placeholder="Select" required >
 															<option value=""></option>
@@ -189,12 +191,12 @@
 														</select>
 													</div>
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<input type="text" class="form-control" name="debit[]" id="debit" value="<?php echo $tdetail1['debit'];?>"  required >
 													</div>         
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<input type="text" class="form-control" name="credit[]" id="credit" value="<?php echo $tdetail1['credit'];?>" required >
 													</div>         
@@ -204,7 +206,7 @@
 										<?php endforeach;
 										if(sizeof($this->tdetailsObj->get(array('td.transaction'=>$id, 'td.type' => 1))) == 0): // type=1 user inputted data ?>
 											<tr>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<select id="location" name="location[]" class="form-control" data-placeholder="Select" >
 															<option value=""></option>
@@ -213,9 +215,10 @@
 															?>
 																<optgroup label="<?php echo $region_row['region'];?>">
 																	<?php 
-																		$locations = $locationObj->get(array('region'=>$region_row['id']));
+																		$locations = $entryLocations;
 																		  
 																		foreach ($locations as $location_row):
+																		if ((int) $location_row['region'] !== (int) $region_row['id']) continue;
 																	?>
 																		<option value="<?php echo $location_row['id']; ?>">
 																			<?php echo $location_row['location']; ?>
@@ -226,7 +229,7 @@
 														</select>
 													</div>
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<select id="head" name="head[]" class="form-control tr_head" data-placeholder="Select">
 															<option value=""></option>
@@ -236,19 +239,19 @@
 														</select>
 													</div>
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<select id="sub_head" name="sub_head[]" class="form-control" data-placeholder="Select" >
 															<option value=""></option>
 														</select>
 													</div>
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<input type="text" class="form-control" name="debit[]" id="debit" value="0.00" >
 													</div>         
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<input type="text" class="form-control" name="credit[]" id="credit" value="0.00" >
 													</div>         
@@ -304,7 +307,9 @@
 			tot_credit: <?php echo $total_credit; ?>
 		});	
 
-		const fv = FormValidation.formValidation(document.getElementById('#form'), {
+		let fv = null;
+		if (window.FormValidation && FormValidation.formValidation && FormValidation.plugins && FormValidation.plugins.Trigger) {
+			fv = FormValidation.formValidation(document.getElementById('#form'), {
 			fields: {
 				'voucher_date': {
 	                validators: {
@@ -394,8 +399,11 @@
 				$('div#'+ e.field.replace('[]','') +'_chosen').addClass('is-invalid');
 			}
 		});
+		}
 		$('form select').chosen().change(function () {
-			fv.revalidateField($(this).attr('name'));
+			if (fv) {
+				fv.revalidateField($(this).attr('name'));
+			}
 		});
 	});
 </script> 

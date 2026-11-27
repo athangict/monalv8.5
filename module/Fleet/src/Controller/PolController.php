@@ -98,6 +98,7 @@ class PolController extends AbstractActionController
 	{
 		$this->init();		
 			
+		$currentHeadId = (int)$this->getDefinedTable(Fleet\TransportSanctionOrderTable::class)->getColumn($this->_id, 'head');
 		return new ViewModel( array(
 				'title' => "POL Mangement Setup",
 		));
@@ -134,7 +135,7 @@ class PolController extends AbstractActionController
 			'month' => $month,
 			'minYear' => $minYear,
 		);
-		$results = $this->getDefinedTable(Fleet\TransportSanctionOrderTable::class)->getLocDateWise('sanction_order_date',$year,$month,array('status'=>array(1,2,3,4,6)));
+		$results = $this->getDefinedTable(Fleet\TransportSanctionOrderTable::class)->getLocDateWise('sanction_order_date',$year,$month,array());
 		//print_r($results); exit;
 		return new ViewModel(array(
 			'title' 	  => 'POL Management',
@@ -181,9 +182,25 @@ class PolController extends AbstractActionController
 		$this->init();	
 		if($this->getRequest()->isPost()){
 			
-			$form = $this->getRequest()->getpost();					
+			$form = $this->getRequest()->getpost();
+			$partyId = filter_var($form['party'] ?? null, FILTER_VALIDATE_INT, array('options' => array('min_range' => 1)));
+			$parties = $partyId ? $this->getDefinedTable(Accounts\PartyTable::class)->get(array(
+				'p.id' => $partyId,
+				'r.role' => 'Transporter',
+			)) : array();
+			if (empty($parties)):
+				$this->flashMessenger()->addMessage('error^ Please select a transporter party.');
+				return $this->redirect()->toRoute('pol', array('action' => 'addpol'));
+			endif;
+			$partySubheads = $this->getDefinedTable(Accounts\SubheadTable::class)->getbanks(array(
+				'ref_id' => $partyId,
+				'type' => 2,
+			));
+			if (count($partySubheads) !== 1):
+				$this->flashMessenger()->addMessage('error^ The selected transporter must have exactly one linked accounting subhead.');
+				return $this->redirect()->toRoute('pol', array('action' => 'addpol'));
+			endif;
 			
-			$location_prefix = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($this->_userloc,'prefix');	
 			$date = date('ym',strtotime($form['sanction_order_date']));			
 			$tmp_SONo = "PL"."SO".$date; 			
 			$results = $this->getDefinedTable(Fleet\TransportSanctionOrderTable::class)->getMonthlySO($tmp_SONo);
@@ -192,7 +209,7 @@ class PolController extends AbstractActionController
 			foreach($results as $result):
 				array_push($so_no_list, substr($result['sanction_order_no'], 8));
 			endforeach;
-			$next_serial = max($so_no_list) + 1;	
+			$next_serial = (empty($so_no_list) ? 0 : max($so_no_list)) + 1;	
 			switch(strlen($next_serial)){
 				case 1: $next_so_serial = "000".$next_serial; break;
 				case 2: $next_so_serial = "00".$next_serial;  break;
@@ -220,9 +237,9 @@ class PolController extends AbstractActionController
 				//'rate'            	  => $form['rate'],
 				'amount'              => $form['amount'],
 				'remark'              => $form['note'],
-				'party'               => $form['party'],
+				'party'               => $partySubheads[0]['id'],
 				'ref_no'              => $form['ref_no'],
-				'license_plate'              => $form['license_plate'],
+				'license_plate'       => $form['license_plate'],
 				'status' 		      => '1', 
 				'author'              => $this->_author,
 				'created'             => $this->_created,
@@ -234,7 +251,6 @@ class PolController extends AbstractActionController
 			$result = $this->getDefinedTable(Fleet\TransportSanctionOrderTable::class)->save($data);
 			if($result > 0){ 
 				$location              = $form['location'];
-				$cost_center           = $form['cost_center'];
 				$initial_reading       = $form['initial_reading'];
 				$final_reading         = $form['final_reading'];
 				$km_covered            = $form['km_covered'];
@@ -249,16 +265,16 @@ class PolController extends AbstractActionController
 				for($i=0; $i < sizeof($initial_reading); $i++):
 				
 				$date = date('Y-m-d');
-				$location_prefix = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($location_id,'prefix');	
+				$location_prefix = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($location,'prefix');	
 				$date = date('ym',strtotime($date));			
 				$tmp_CMNo = $location_prefix."CM".$date; 			
 				$answers = $this->getDefinedTable(Fleet\TransportCashMemoTable::class)->getMonthlyCM($tmp_CMNo);
 				
 				$cm_no_list = array();
 				foreach($answers as $answer):
-					array_push($cm_no_list, substr($answer['cash_memo_no'], 8));
+					array_push($cm_no_list, substr($answer['cash_memo_no'], strlen($tmp_CMNo)));
 				endforeach;
-				$next_serial = max($cm_no_list) + 1 + $i;	
+				$next_serial = (empty($cm_no_list) ? 0 : max($cm_no_list)) + 1 + $i;	
 				switch(strlen($next_serial)){
 					case 1: $next_cm_serial = "000".$next_serial; break;
 					case 2: $next_cm_serial = "00".$next_serial;  break;
@@ -297,19 +313,19 @@ class PolController extends AbstractActionController
 				return $this->redirect()->toRoute('pol', array('action' =>'viewpol', 'id' => $result));
 			}
 			else{
-                                $this->_connection->rollback(); // rollback transaction on failure
+                $this->_connection->rollback(); // rollback transaction on failure
 				$this->flashMessenger()->addMessage("error^ Failed to add new POL Management");
 				return $this->redirect()->toRoute('pol');
 			}		
 		}	
+		$permittedLocationIds = array_values(array_filter(array_map('trim', explode(',', (string)$this->_user->location)), 'strlen'));
 		return new ViewModel( array(
 			'title'           => "Add POL ",
 			'id'             =>$this->_id,
 			'locationObj' 	  => $this->getDefinedTable(Administration\LocationTable::class),
-			//'party' => $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('head'=>[76,79,90,91,92,93,94,95,96,97,112,118])),
-			'party' 		  => $this->getDefinedTable(Accounts\PartyTable::class)->get(array('p.role'=>array(5,7))),
-			'head' 			  => $this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.id'=>array(259,252,256))),
-			'head1' 		  => $this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.id'=>array(142,144,233,234,235,236,65))),
+			'permitted_locations' => !empty($permittedLocationIds) ? $this->getDefinedTable(Administration\LocationTable::class)->get(array('id'=>$permittedLocationIds)) : array(),
+			'party' 		  => $this->getDefinedTable(Accounts\PartyTable::class)->get(array('r.role'=>'Transporter')),
+			'head' 			  => $this->getDefinedTable(Fleet\VehicleRegisterTable::class)->getExpenseHeads(),
 			'rowsets'         => $this->getDefinedTable(Accounts\AssetsTable::class)->getAll(),
 			'veg_logs'        => $this->getDefinedTable(Fleet\TransportVehicleLogTable::class)->getAll(),
 			'rowsets'         => $this->getDefinedTable(Accounts\AssetsTable::class)->getAll(),
@@ -462,6 +478,8 @@ class PolController extends AbstractActionController
 					$this->getDefinedTable(Fleet\TransportCashMemoTable::class)->remove($cash_memos['id']);
 				endforeach;
             endif;		
+		$currentHeadId = (int)$this->getDefinedTable(Fleet\TransportSanctionOrderTable::class)->getColumn(array('id'=>$this->_id), 'head');
+		$permittedLocationIds = array_values(array_filter(array_map('trim', explode(',', (string)$this->_user->location)), 'strlen'));
 		return new ViewModel( array(
 			'title'           => "Edit POL ",
 			'id'              =>$this->_id,
@@ -473,8 +491,9 @@ class PolController extends AbstractActionController
 			'vel_logObj'        => $this->getDefinedTable(Fleet\TransportVehicleLogTable::class),
 			'rowsets'         => $this->getDefinedTable(Fleet\VehicleRegisterTable::class)->getAll(),
 			'activities'  	  => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
-			'heads'				=> $this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.id'=>array(176,179,198))),
-			'sh' 				=> $this->getDefinedTable(Accounts\SubheadTable::class)->getAll(),
+			'heads'				=> $this->getDefinedTable(Fleet\VehicleRegisterTable::class)->getExpenseHeads(),
+			'sh' 				=> ($currentHeadId > 0) ? $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.head'=>$currentHeadId)) : array(),
+			'permitted_locations' => !empty($permittedLocationIds) ? $this->getDefinedTable(Administration\LocationTable::class)->get(array('id'=>$permittedLocationIds)) : array(),
 			'subheadObj' 		  => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'head1' 		  => $this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.id'=>array(142,144,233,234,235,236,65))),
 		));
@@ -746,6 +765,17 @@ class PolController extends AbstractActionController
        /**
 	 * pol action
 	 */
+	protected function canApplyPol(array $pol)
+	{
+		if (!in_array((string)$pol['status'], array('1', '2'), true)):
+			return false;
+		endif;
+		$roles = array_map('trim', explode(',', (string)$this->_login_role));
+		$highestRole = $this->getDefinedTable(Acl\RolesTable::class)->getMax('id');
+		return ($highestRole && in_array((string)$highestRole, $roles, true))
+			|| (in_array('2', $roles, true) && $this->_userloc == $pol['location_id']);
+	}
+
 	public function viewpolAction()
 	{
 		$this->init();	
@@ -759,10 +789,12 @@ class PolController extends AbstractActionController
 		}
         $dispatch_ID = $params['0'];		
 			
+		$sanctions = $this->getDefinedTable(Fleet\TransportSanctionOrderTable::class)->get($this->_id);
 		return new ViewModel( array(
 				'title' => "View POL Mangement",
 				'id'             =>$this->_id,
-                'tr_sanctions'   => $this->getDefinedTable(Fleet\TransportSanctionOrderTable::class)->get($this->_id),
+                'tr_sanctions'   => $sanctions,
+				'can_apply'      => !empty($sanctions) && $this->canApplyPol($sanctions[0]),
                 'veg_logObj'     => $this->getDefinedTable(Fleet\TransportVehicleLogTable::class),
 				'CMemoObj'        => $this->getDefinedTable(Fleet\TransportCashMemoTable::class),
 				'userObj'   => $this->getDefinedTable(Administration\UsersTable::class),
@@ -1054,7 +1086,16 @@ class PolController extends AbstractActionController
 	 */
 	public function processpolAction()
 	{
-		$this->init();	
+		$this->init();
+		$polId = $this->getRequest()->isPost() ? $this->getRequest()->getPost('tp_id') : $this->_id;
+		$polId = filter_var($polId, FILTER_VALIDATE_INT, array('options' => array('min_range' => 1)));
+		$pol = $polId ? $this->getDefinedTable(Fleet\TransportSanctionOrderTable::class)->get($polId) : array();
+		if (empty($pol) || !$this->canApplyPol($pol[0])):
+			$this->flashMessenger()->addMessage('error^ You cannot apply this POL at its current status or location.');
+			return $polId
+				? $this->redirect()->toRoute('pol', array('action' => 'viewpol', 'id' => $polId))
+				: $this->redirect()->toRoute('pol');
+		endif;
 		if($this->getRequest()->isPost()):		
 			$form = $this->getRequest()->getPost()->toArray();	
 			$this->_connection->beginTransaction(); //***Transaction begins here***//
@@ -1072,13 +1113,11 @@ class PolController extends AbstractActionController
 					$sourceLocation = $this->getDefinedTable(Fleet\TransportSanctionOrderTable::class)->getColumn($form['tp_id'], 'location');			
 			$result = $this->getDefinedTable(Fleet\TransportSanctionOrderTable::class)->save($data);		
 			if($result):
-				$expenseresult =$form['tp_id'];
-				$pol = $this->getDefinedTable(Fleet\TransportSanctionOrderTable::class)->get($result);
 				foreach($pol as $pols):
 					$expensedate = $pols['sanction_order_date'];
 					$location = $pols['location'];
-					$region = $this->getDefinedTable(Administration\UsersTable::class)->getColumn(array('id'=>$this->_author),'region');
-					$loc = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($this->_user->location, 'prefix');
+					$region = $this->getDefinedTable(Administration\LocationTable::class)->getColumn($sourceLocation, 'region');
+					$loc = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($sourceLocation, 'prefix');
 					$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getcolumn(11,'prefix');
 					$date = date('ym',strtotime(date('Y-m-d')));
 					$tmp_VCNo = $loc.'-'.$prefix.$date;
@@ -1087,9 +1126,9 @@ class PolController extends AbstractActionController
 					
 					$pltp_no_list = array();
 					foreach($results as $result):
-						array_push($pltp_no_list, substr($result['voucher_no'], 14));
+						array_push($pltp_no_list, substr($result['voucher_no'], strlen($tmp_VCNo)));
 					endforeach;
-					$next_serial = max($pltp_no_list) + 1;
+					$next_serial = (empty($pltp_no_list) ? 0 : max($pltp_no_list)) + 1;
 						
 					switch(strlen($next_serial)){
 						case 1: $next_dc_serial = "0000".$next_serial; break;
@@ -1115,7 +1154,9 @@ class PolController extends AbstractActionController
 								'modified' 			=>$this->_modified,
 							);
 							$resultTrans = $this->getDefinedTable(Accounts\TransactionTable::class)->save($data);
-							//if($resultTrans >0){
+							if (!$resultTrans):
+								return $this->polApplyFailed($polId);
+							endif;
 								$flow=array(
 									'flow' 				=> 2,
 									'application' 		=> $resultTrans,
@@ -1126,13 +1167,16 @@ class PolController extends AbstractActionController
 									'routing' 			=> 6,
 									'status' 			=> 6, // status applied 
 									'routing_status'	=>2,
-									'action_performed'	=>1,
+									'action_performed'	=>0,
 									'description'		=>"POL Expense",
 									'author' 			=>$this->_author,
 									'created' 			=>$this->_created,  
 									'modified' 			=>$this->_modified,
 								);
-								$flow=$this->getDefinedTable(Administration\FlowTransactionTable::class)->save($flow);
+								$flowResult=$this->getDefinedTable(Administration\FlowTransactionTable::class)->save($flow);
+								if (!$flowResult):
+									return $this->polApplyFailed($polId);
+								endif;
 								$transactionDtls1 = array(
 									'transaction' => $resultTrans,
 									'voucher_dates' => $data['voucher_date'],
@@ -1154,6 +1198,9 @@ class PolController extends AbstractActionController
 								);
 							$transactionDtls1 = $this->_safedataObj->rteSafe($transactionDtls1);
 							$result1 = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->save($transactionDtls1);
+							if (!$result1):
+								return $this->polApplyFailed($polId);
+							endif;
 							$transactionDtls2 = array(
 									'transaction' => $resultTrans,
 									'voucher_dates' => $data['voucher_date'],
@@ -1168,13 +1215,16 @@ class PolController extends AbstractActionController
 									'type' => '1',//user inputted  data
 									'status' => 6, // status applied
 									'against' 	  	=> 0,
-									'activity'=>$data['voucher_amount'],
+									'activity'=>$sourceLocation,
 									'author' =>$this->_author,
 									'created' =>$this->_created,
 									'modified' =>$this->_modified,
 								);
 								$transactionDtls2 = $this->_safedataObj->rteSafe($transactionDtls2);
 								$result2 = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->save($transactionDtls2);
+								if (!$result2):
+									return $this->polApplyFailed($polId);
+								endif;
 								$data2 = array(
 									'id' 	=> $pols['id'],
 									'transaction' => $resultTrans,
@@ -1182,7 +1232,9 @@ class PolController extends AbstractActionController
 								$data2 =  $this->_safedataObj->rteSafe($data2);
 								$result5 = $this->getDefinedTable(Fleet\TransportSanctionOrderTable::class)->save($data2);
 						endforeach;
-						if($result4):
+						if (!$result5):
+							return $this->polApplyFailed($polId);
+						endif;
 							$notification_data = array(
 								'route'         => 'transaction',
 								'action'        => 'viewcredit',
@@ -1195,8 +1247,12 @@ class PolController extends AbstractActionController
 							//print_r($notification_data);exit;
 							$notificationResult = $this->getDefinedTable(Acl\NotificationTable::class)->save($notification_data);
 							if($notificationResult > 0 ){	
-								$user = $this->getDefinedTable(Administration\UsersTable::class)->get(array('region'=>$region,'role'=>array('3')));
-								foreach($user as $row):						    
+								$user = $this->getDefinedTable(Administration\UsersTable::class)->get(array('region'=>$region,'status'=>1));
+								foreach($user as $row):
+									$roles = array_map('trim', explode(',', (string)$row['role']));
+									if(!in_array('3', $roles, true)):
+										continue;
+									endif;
 									$user_location_id = $this->getDefinedTable(Administration\UsersTable::class)->getColumn($row['id'], 'location');
 									//if($user_location_id == $location ):						
 										$notify_data = array(
@@ -1212,7 +1268,6 @@ class PolController extends AbstractActionController
 									//endif;
 								endforeach;
 							}
-						endif;
 				$this->_connection->commit(); // commit transaction over success
 				$this->flashMessenger()->addMessage("success^".$message);
 			else:
@@ -1229,6 +1284,13 @@ class PolController extends AbstractActionController
 		$viewModel->setTerminal('false');
         return $viewModel;	
 	}
+
+	protected function polApplyFailed($polId)
+	{
+        $this->_connection->rollback();
+        $this->flashMessenger()->addMessage('error^ Failed to apply the POL expense.');
+        return $this->redirect()->toRoute('pol', array('action' => 'viewpol', 'id' => $polId));
+	}
 	/***********************************************Get Finction**********************************************/
 	/**
 	 * Get gettransport Action
@@ -1239,7 +1301,11 @@ class PolController extends AbstractActionController
 		$form = $this->getRequest()->getPost();
 		$locationId =$form['locationId'];
 		$headId =$form['headId'];
-		$item_list = $this->getDefinedTable(Fleet\VehicleRegisterTable::class)->get(array('location'=>$locationId,'head'=>$headId,'pol'=>1));
+		$filters = array('location'=>$locationId, 'head'=>$headId);
+		if (empty($form['includeService'])):
+			$filters['pol'] = 1;
+		endif;
+		$item_list = $this->getDefinedTable(Fleet\VehicleRegisterTable::class)->get($filters);
 		
 			$transport = "<option value=''></option>";
 		foreach($item_list as $subhead_lists):

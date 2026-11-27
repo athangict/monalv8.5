@@ -120,7 +120,7 @@ class UploadController extends AbstractActionController
 					$date = date('ym',strtotime(date('Y-m-d')));
 					$file_name =  $date.$a.$b.$c.$d.$e.$f.'.' . $ext; //file path
 					
-					if(!is_dir($this->_dir . DIRECTORY_SEPARATOR . $folder_name .DIRECTORY_SEPARATOR. $applicationNO,0755,true)) {						
+					if(!is_dir($this->_dir . DIRECTORY_SEPARATOR . $folder_name .DIRECTORY_SEPARATOR. $applicationNO)) {						
 						mkdir($this->_dir . DIRECTORY_SEPARATOR . $folder_name .DIRECTORY_SEPARATOR. $applicationNO,0755,true);
 						chmod($this->_dir . DIRECTORY_SEPARATOR . $folder_name .DIRECTORY_SEPARATOR. $applicationNO, 0755);
 					}

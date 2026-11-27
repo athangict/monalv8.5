@@ -294,24 +294,34 @@ class FlatTable extends AbstractTableGateway
 		$sql = new Sql($adapter);
 	    $select = $sql->select();
 		$select->from(array('f'=>$this->table))
-				->join(array('t'=>'rs_leased_rent'), 't.flat = f.id',array('tenant'=>'lesse_name'))
-				->join(array('s'=>'rs_flat_status'), 'f.flat_status = s.id',array('flat_status'=>'id'))
-		       ->join(array('b'=>'rs_building'), 'f.building = b.id',array('building'=>'id'))
-			   ->join(array('bm'=>'rs_building_master'), 'b.asset = bm.id',array('name','region','location'));
+				->columns(array('id','floor','flat_no','rent','flat_status'))
+				->join(array('t'=>'rs_leased_rent'), 't.flat = f.id',array('tenant'=>'lesse_name'), Select::JOIN_LEFT)
+				->join(array('b'=>'rs_building'), 'f.building = b.id', array())
+				->join(array('a'=>'ast_asset'), 'b.asset = a.id', array(), Select::JOIN_LEFT)
+				->join(
+					array('bm'=>'rs_building_master'),
+					'b.asset = bm.id',
+					array(
+						'name' => new Expression('COALESCE(a.name, bm.name)'),
+						'region' => new Expression('COALESCE(a.region, bm.region)'),
+						'location' => new Expression('COALESCE(a.location, bm.location, b.location)'),
+					),
+					Select::JOIN_LEFT
+				);
 			   
 		if($data['region'] != '-1'){
-			$select->where(array('bm.region'=>$data['region']));
+			$select->where('COALESCE(a.region, bm.region) = '.(int)$data['region']);
 		}
 		if($data['building'] != '-1'){
-			$select->where(array('bm.id'=>$data['building']));
+			$select->where('b.asset = '.(int)$data['building']);
 		}
 		if($data['location'] != '-1'){
-			$select->where(array('bm.location'=>$data['location']));
+			$select->where('COALESCE(a.location, bm.location, b.location) = '.(int)$data['location']);
 		}
 		if($data['block'] != '-1'){
-			$select->where(array('b.block'=>$data['block']));
+			$select->where(array('b.block'=>(int)$data['block']));
 		}
-			if($data['status'] != '-1'){
+		if($data['status'] != '-1'){
 			$select->where(array('f.flat_status'=>$data['status']));
 		}
 	

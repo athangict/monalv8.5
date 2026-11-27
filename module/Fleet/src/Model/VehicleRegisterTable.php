@@ -35,6 +35,23 @@ class VehicleRegisterTable extends AbstractTableGateway
 	    return $results;
 	}
 
+	public function getExpenseHeads()
+	{
+		$sql = new Sql($this->adapter);
+		$select = $sql->select();
+		$select->from(array('vr' => $this->table))
+			->columns(array())
+			->join(array('h' => 'fa_head'), 'h.id = vr.head', array('id', 'code', 'name'))
+			->join(array('g' => 'fa_group'), 'g.id = h.group', array())
+			->join(array('c' => 'fa_class'), 'c.id = g.class', array())
+			->quantifier(Select::QUANTIFIER_DISTINCT)
+			->order('h.code ASC');
+		$select->where->expression('LOWER(c.name) = ?', 'expense');
+
+		$selectString = $sql->getSqlStringForSqlObject($select);
+		return $this->adapter->query($selectString, $this->adapter::QUERY_MODE_EXECUTE)->toArray();
+	}
+
 	
 	/**
 	 * Return records of given condition array | given id

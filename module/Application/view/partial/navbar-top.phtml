@@ -29,18 +29,22 @@ $appLogoSrc = $this->basePath('/' . ltrim((string) $appLogo, '/'));
 		</div>
 		<div class="navbar-buttons navbar-header pull-right" role="navigation">
 		<?php $notificationResult = $this->notification($user->id);
-			foreach($notificationResult as $notifycount);?>
+			$unreadNotificationCount = empty($notificationResult) ? 0 : (int) $notificationResult[0]['count'];?>
 			<ul class="nav ace-nav">
 				<li class="purple dropdown-modal">
 					<a data-toggle="dropdown" class="dropdown-toggle" href="#">
 						<i class="ace-icon fa fa-bell icon-animated-bell"></i>
-						<span class="badge badge-important"><?php echo (sizeof($notificationResult)>0)?$notifycount['count']:'';?></span>
+						<?php if ($unreadNotificationCount > 0): ?>
+						<span class="badge badge-important"><?php echo $unreadNotificationCount; ?></span>
+						<?php endif; ?>
 					</a>
 					<ul class="dropdown-menu-right dropdown-navbar navbar-pink dropdown-menu dropdown-caret dropdown-close">
 						<li class="dropdown-header">
 							<i class="ace-icon fa fa-exclamation-triangle"></i>
-							<?php echo $count = count($notificationResult); ?> &nbsp;
-							<?php echo ($count > 1)?"Notifications":"Notification"; ?> 							
+							<?php if ($unreadNotificationCount > 0): ?>
+								<?php echo $unreadNotificationCount; ?> &nbsp;
+							<?php endif; ?>
+							<?php echo $unreadNotificationCount === 1 ? "Notification" : "Notifications"; ?>
 						</li>
 						<li class="dropdown-content">
 							<ul class="dropdown-menu dropdown-navbar navbar-pink">
@@ -49,7 +53,8 @@ $appLogoSrc = $this->basePath('/' . ltrim((string) $appLogo, '/'));
 									<a href="<?php echo $this->url($notify['route'], array('action'=>$notify['action'], 'id'=>$notify['key'].'-1-'.$notify['id']));?>">
 										<div class="clearfix">
 											<span class="pull-left">
-												<i class="btn btn-xs no-hover btn-pink fa fa-user"></i>
+												<i class="fa fa-circle <?php echo (int) $notify['flag'] === 0 ? 'red notification-unread-dot' : 'green'; ?>" aria-hidden="true"></i>
+												<span class="sr-only"><?php echo (int) $notify['flag'] === 0 ? 'Unread' : 'Viewed'; ?>: </span>
 												<?php echo $notify['desc']; ?>
 											</span>											
 										</div>

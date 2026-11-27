@@ -27,7 +27,7 @@
 			</div><!-- end of widget-header -->
 			<div class="widget-body">
 				<div class="widget-main">
-					<form id="#form" method="post" action="<?php echo $this->url('inissue', array('action' => 'addissue')); ?>"  enctype="multipart/form-data" >    
+					<form id="form" method="post" action="<?php echo $this->url('inissue', array('action' => 'addissue')); ?>"  enctype="multipart/form-data" >    
 						<div class="row">	
 							<div class="col-lg-3">    
 								<div class="form-group">
@@ -55,29 +55,6 @@
 							</div>
 							<div class="col-lg-3"> 
 								<div class="form-group">
-									<label for="to_location" class="control-label">Destination Location</label>
-									<select id="to_location" name="to_location" class="form-control" data-placeholder="Select" required>
-									  <option value=""></option>
-									  <?php 
-										$regions = $this->regionObj->getAll();
-										foreach ($regions as $region): ?>
-										<optgroup label="<?php echo $region['region'];?>">
-											<?php  
-												 // retrive locations under the above region ID
-												$locations = $locationObj->get(array('l.region'=>$region['id'],'l.location_type'=>array(1,2,7,4,8,3,5,6)));												 foreach ($locations as $location):?>
-											 <option value="<?php echo $location['id']; ?>">
-												<?php echo $location['location']; ?>
-											 </option>
-											<?php 
-											 endforeach;
-											?>
-									  </optgroup>
-									 <?php endforeach;  ?>	
-									</select> 
-								</div>
-							</div>	
-							<div class="col-lg-3"> 
-								<div class="form-group">
 									<label for="activity" class="control-label">Activity</label>
 									<select id="activity" name="activity" class="form-control" data-placeholder="Select" required>
 										<option value=""></option>
@@ -87,6 +64,19 @@
 									</select> 
 								</div>
 							</div>		
+							<div class="col-lg-3">
+								<div class="form-group">
+									<label for="sub_head" class="control-label">Sub Head</label>
+									<select id="sub_head" name="sub_head" class="form-control" data-placeholder="Select" required>
+										<option value=""></option>
+										<?php foreach($subheads as $subhead): ?>
+											<option value="<?php echo $subhead['id']; ?>">
+												<?php echo $subhead['sub_head']; ?>
+											</option>
+										<?php endforeach; ?>
+									</select>
+								</div>
+							</div>
 						</div>
 						<div class="row">
 						    <div class="col-lg-3"> 
@@ -102,73 +92,42 @@
 							</div>
 							<div class="col-lg-3">
 								<div class="form-group">
-									<label for="fcb_transport" class="control-label">FCB Transport</label>
-									<div class="radio">
-										<label>
-											<input class="ace" type="radio" name="fcb_transport" id="fcb_transport" value="1" />
-											<span class="lbl"> Yes </span>
-										</label>
-										<label>
-											<input class="ace" type="radio" name="fcb_transport" id="fcb_transport" value="0" checked />
-											<span class="lbl"> No </span>
-										</label>
-									</div>
-								</div>
-							</div> 
-							<div class="col-lg-3" id="fcb">
-								<div class="form-group">
-									<label for="transporter_fcb" class="control-label">Name of Driver</label>
-									<select class="form-control" name="transporter_fcb" id="transporter_fcb" data-placeholder="Select" > 
+									<label for="department" class="control-label">Department</label>
+									<select id="department" name="department" class="form-control" data-placeholder="Select" required>
 										<option value=""></option>
-										<?php foreach($employee_driver as $emp):?>
-											<option value="<?php echo $emp['id'];?>">
-												<?php echo $emp['full_name'];?> (<?php echo $emp['designation']; ?>)
+										<?php foreach ($departments as $department): ?>
+											<option value="<?php echo $department['id']; ?>">
+												<?php echo $department['department']; ?>
 											</option>
-										<?php endforeach;?>
+										<?php endforeach; ?>
 									</select>
-								</div>
-							</div>
-							<div class="col-lg-3" id="non_fcb">
-								<div class="form-group">
-									<label for="transporter_nonfcb" class="control-label">Name of Driver</label>
-									<input type="text" class="form-control" name="transporter_nonfcb" id="transporter_nonfcb" placeholder="Name of Driver" > 
 								</div>
 							</div>
 							<div class="col-lg-3">
 								<div class="form-group">
-									<label for="vehicle_no" class="control-label">Vehicle No.</label>
-									<input type="text" class="form-control" name="vehicle_no" id="vehicle_no" placeholder="Vehicle No." required/> 
+									<label for="issued_to" class="control-label">Issue To Employee</label>
+									<select id="issued_to" name="issued_to" class="form-control" data-placeholder="Select" required>
+										<option value=""></option>
+									</select>
+									<input type="hidden" id="to_location" name="to_location" value="" />
 								</div>
-							</div>	
-						</div>
-						<div class="row">
-							<div class="col-lg-3"> 
-								<div class="form-group">
-									<label for="party" class="control-label">Transpoter</label>
-									<select id="party" name="party" class="form-control" data-placeholder="Select" required>
-										<option value=""></option>	
-										<?php foreach ($this->parties as $party): ?>
-											<option value="<?php echo $party['id'];?>">
-												<?php echo $party['name']; ?>
-											</option>
-										<?php endforeach; ?>								
-									</select> 
-								</div>
-							</div>						
+							</div>
 						</div>
 						<div class="row">
 						   <div class="col-lg-12"> 
 							  <h5>Issue Details</h5>
-								 <div>
-									<table id="trdetails_table" class="table small-padding">
+								 <div class="transaction-details">
+									<table id="trdetails_table" class="table small-padding account-entry-details issue-entry-details">
+										<colgroup>
+											<col span="7">
+											<col class="transaction-action-column">
+										</colgroup>
 										<thead>
 											<tr>
 												<th>Item</th>
-												<th>Asset/Store Spare</th>
 												<th>UOM</th>
 												<th>Qty Rate</th>
-												<th>Source Qty</th>
-												<th>Destination Qty</th>
+												<th>Stock Qty</th>
 												<th>Issue Qty</th>
 												<th>Amount</th>
 												<th>Remarks</th>
@@ -182,13 +141,7 @@
 														<select id="item" name="item[]" class="form-control"  data-placeholder="Select" required>
 															<option value=""></option>								
 														</select>
-													</div>
-												</td>
-												<td>
-													<div class="form-group">
-														<select id="assetssp" name="assetssp[]" class="form-control" data-placeholder="Select" required>
-															<option value=""></option>
-														</select>
+														<input type="hidden" id="assetssp" name="assetssp[]" value="0" />
 													</div>
 												</td>
 												<td>
@@ -206,11 +159,6 @@
 												<td>
 													<div class="form-group">
 														<input name="from_balance[]" id="from_balance" type="text" class="form-control" value="0.00" readonly required />
-													</div>
-												</td>
-												<td>
-													<div class="form-group">
-														<input name="to_balance[]" id="to_balance" type="text" class="form-control" value="0.00" readonly />  
 													</div>
 												</td>
 												<td>
@@ -277,52 +225,28 @@ $('#issue_date').datepicker();
 		$('form').formValidation('revalidateField', $(this).attr('id'));
 	});
 
-	$("#vehicle_no").bind('keyup', function (e) {
-		if (e.which >= 97 && e.which <= 122) {
-			var newKey = e.which - 32;
-			// I have tried setting those
-			e.keyCode = newKey;
-			e.charCode = newKey;
-		}
-		$("#vehicle_no").val(($("#vehicle_no").val()).toUpperCase());
-	});
-	$("#transporter_nonfcb").bind('keyup', function (e) {
-		if (e.which >= 97 && e.which <= 122) {
-			var newKey = e.which - 32;
-			// I have tried setting those
-			e.keyCode = newKey;
-			e.charCode = newKey;
-		}
-		$("#transporter_nonfcb").val(($("#transporter_nonfcb").val()).toUpperCase());
-	});
-	/*** onChange of fcb_transport ***/
-	if($('input[name="fcb_transport"]:checked').val() == '0'){
-		$("div#fcb").hide();
-		$("div#non_fcb").show();
-	}else{
-		$("div#fcb").show();
-		$("div#non_fcb").hide();
-	}
-	$("input[name='fcb_transport']").change(function(e){
-		if($(this).val() == '0') {
-			$("div#fcb").hide();
-			$("div#non_fcb").show();
-			$('select#transporter_fcb option:selected').removeAttr('selected');
-			$("select#transporter_fcb").trigger("chosen:updated");
-			$('select#party option:selected').removeAttr('selected');
-			$("select#party").trigger("chosen:updated");
-		} else {
-			$("div#fcb").show();
-			$("div#non_fcb").hide();
-			$("input[name='transporter_nonfcb']").val('');
-			$('select#party option:selected').removeAttr('selected');
-			$('select#party option[value=323]').attr('selected', 'selected');
-			$("select#party").trigger("chosen:updated");
-		}
-	});
 	$('#dispatch_date').datepicker();
 	$('#dispatch_date').on('changeDate',function(){
 		$('form').formValidation('revalidateField', $(this).attr('id'));
+	});
+	$('#department').change(function(){
+		$('#issued_to').html("<option value=''></option>").trigger('chosen:updated');
+		$('#to_location').val('');
+		$.post(
+			'<?php echo $this->url("inissue", array("action" => "getissuedtoemployee"));?>',
+			{
+				department: $(this).val()
+			},
+			function(data){
+				$('#issued_to').html(data.employees);
+				$('#issued_to').trigger('chosen:updated');
+			},
+			'json'
+		);
+	});
+	$('#issued_to').change(function(){
+		var locationId = $('#issued_to option:selected').data('location') || '';
+		$('#to_location').val(locationId);
 	});
 
 	$('#trdetails_table').issue({
@@ -331,14 +255,22 @@ $('#issue_date').datepicker();
 		getDetails:'<?php echo $this->url("inissue", array("action" => "getdetails"));?>',
 		getStockBalance:'<?php echo $this->url("inissue", array("action" => "getstockbalance"));?>',
 	});
+	$(document).on('input keyup change', '#trdetails_table tbody input[id^="quantity-"]', function(){
+		var rowId = $(this).closest('tr').attr('id');
+		var stockQty = parseFloat($('#from_balance-'+rowId).val());
+		var issueQty = parseFloat($(this).val());
+		if($.isNumeric(stockQty) && $.isNumeric(issueQty) && issueQty > stockQty){
+			$(this).val(parseFloat(stockQty).toFixed(2)).trigger('input');
+		}
+	});
 
 	/*** Form Validation ***/   
-		const fv = FormValidation.formValidation(document.getElementById('#form'), {
+		const fv = FormValidation.formValidation(document.getElementById('form'), {
 			fields: {
-				dispatch_date: {
+				issue_date: {
 					validators: {
 						notEmpty: {
-							message: 'Please select dispatch date.'
+							message: 'Please select issue date.'
 						},
 					},
 				},
@@ -349,10 +281,17 @@ $('#issue_date').datepicker();
 						}
 					}
 				}, 
-				to_location: {
+				department: {
 					validators: {
 						notEmpty: {
-							message: 'Please select destination location.'
+							message: 'Please select department.'
+						}
+					}
+				},
+				issued_to: {
+					validators: {
+						notEmpty: {
+							message: 'Please select employee.'
 						}
 					}
 				},
@@ -363,35 +302,14 @@ $('#issue_date').datepicker();
 						}
 					}
 				},
-				fcb_transport:{
+				sub_head: {
 					validators: {
 						notEmpty: {
-							message: 'Please provide fcb transport'
+							message: 'Please select sub head.'
 						}
 					}
 				},
-				/*'transporter':{
-					validators: {
-						notEmpty: {
-							message: 'Please provide name of driver.'
-						}
-					}
-				},*/
-				vehicle_no:{
-					validators: {
-						notEmpty: {
-							message: 'Please provide vechile no.'
-						}
-					}
-				},
-				party:{
-					validators: {
-						notEmpty: {
-							message: 'Please select transporter.'
-						}
-					}
-				},
-				item[]: {
+				'item[]': {
 					validators: {
 						notEmpty: {
 							message: 'Please select item.'
@@ -405,22 +323,14 @@ $('#issue_date').datepicker();
 						}
 					}
 				},*/
-				from_balance[]: {
-					validators: {
-						greaterThan: {
-							value: '1',
-							message: 'The source quantity must be greater than 0'
-						}
-					}
-				},
-				uom[]: {
+				'uom[]': {
 					validators: {
 						notEmpty: {
 							message: 'Please select uom.'
 						}
 					}
 				},
-				quantity[]: {
+				'quantity[]': {
 					validators: {
 						notEmpty: {
 							message: 'Please provide quantity.'

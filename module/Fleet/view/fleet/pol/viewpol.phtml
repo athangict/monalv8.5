@@ -34,9 +34,7 @@ $transaction_id= $row['transaction'];
 					</div>
 					<div class="widget-toolbar hidden-xs">
 						<div class="btn-group">
-							<a class="btn btn-xs btn-danger" data-toggle="modal" data-target="#modal" href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "29-".$id)); ?>" title="View Activity Logs">
-								<i class="ace-icon fa fa-plus bigger-120" ></i>  
-							</a> 
+							<?php echo $this->button(6, '29-'.$id, 0, 3);?>
 							<a class="btn btn-xs" id="print" title="Print">
 								<i class="ace-icon fa fa-file-pdf-o bigger-120"></i>
 							</a>
@@ -102,7 +100,7 @@ $transaction_id= $row['transaction'];
 										</li>
 										<li>
 											<i class="ace-icon fa fa-caret-right blue"></i>
-											<b>Party. : </b><?php echo $party; ?>
+											<b>Party. : </b><?php echo $this->subheadObj->getColumn($party,'name'); ?>
 										</li>
 										<li>
 											<i class="ace-icon fa fa-caret-right blue"></i>
@@ -177,9 +175,10 @@ $transaction_id= $row['transaction'];
 								?>					
 							<?php if(($status == '1' ||$status == '2' )&& $this->user_location == $location_id && $role==2):?>
 								<a href="<?php echo $this->url('pol', array('action'=>'editpol', 'id'=>$id));?>" class="btn btn-info"> <i class="fa fa-pencil"></i> Edit </a>
+							<?php endif;?>
+							<?php if($this->can_apply):?>
 								<a data-toggle="modal" data-target="#modal" href="<?php echo $this->url('pol', array('action'=>'processpol', 'id'=>$id));?>" class="btn btn-warning"> <i class="fa fa-arrow-right"></i>Apply</a>
-								
-								<?php endif;?>
+							<?php endif;?>
 							</div>
 						</div>
 							<!-- Upload and Download file attachments -->			

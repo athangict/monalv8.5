@@ -1,4 +1,4 @@
-
+﻿
 <?php
 /**
  * 
@@ -16,39 +16,14 @@
         <div class="panel panel-default">                       
             <div class="panel-body"> 
                 <div class="row">
-					<div class="col-lg-6"> 
-					    <div class="form-group">
-							<label for="name" class="control-label">Name</label>
-							<input class="form-control" name="name" id="name" size="30" placeholder="Name" required> 
-						</div>  
-						<div class="form-group">
-							<label for="code" class="control-label">Code</label>
-							<input class="form-control" name="code" id="code" size="30" placeholder="Code" required> 
-						</div>
-					</div>  
-					<div class="col-lg-6"> 
-						<div class="form-group">
-							<label for="classid" class="control-label">Class</label>
-							<select id="classid" name="classid" class="form-control" data-placeholder="Select" required>
-								<option value=""></option>
-								<?php 
-								foreach ($class as $class):
-								?>
-									<option value="<?php echo $class['id'];?>">
-									<?php echo $class['name']; ?>
-									</option>
-								<?php 
-								endforeach;
-								?>
-							</select>
-						</div>       
-						<div class="form-group">
-							<label for="subhead" class="control-label">Subhead</label>
-							<select class="form-control chosen-widget" id="subhead" name="subhead" data-placeholder="Select" required >
-								<option value=""></option>
-							</select>
-						</div>						
-					</div> 
+                	<div class="form-group col-lg-6">
+                		<label for="name" class="control-label">Name</label>
+                		<input class="form-control" name="name" id="name" size="30" placeholder="Name" required> 
+                	</div>
+                	<div class="form-group col-lg-6">
+                		<label for="code" class="control-label">Code</label>
+                		<input class="form-control" name="code" id="code" size="30" placeholder="Code" required> 
+                	</div>
 					<div class="form-group col-lg-6">
 						<label for="manual" class="control-label">Manually Depreciate</label>
 						<div class="radio">
@@ -60,17 +35,56 @@
 								<input class="ace" type="radio" name="manual" id="manual" value="0"/>
 								<span class="lbl"> No </span>
 							</label> 
-						</div>	
+						</div>
 					</div>
-					<div class="form-group col-lg-6">
-						<label for="depreciation" class="control-label">Depreciation</label>
-						<select class="form-control chosen-widget" id="depreciation" name="depreciation" data-placeholder="Select" required >
-							<option value=""></option>
-							<?php foreach($depreSh as $dep):?>
-								<option value="<?php echo $dep['id'];?>"><?php echo $dep['name'];?>
-							<?php endforeach;?>
-						</select>
-					</div>				
+					<div class="form-group col-lg-6"></div>
+					<div class="col-lg-12">
+						<div class="panel panel-default" style="margin-bottom:0;">
+							<div class="panel-body">
+								<h4 style="margin-top:0;margin-bottom:20px;"><em>Accounts Mapping</em></h4>
+								<div class="row">
+									<div class="form-group col-lg-6">
+										<label for="depreciation" class="control-label"><em>Depreciation Expense</em></label>
+										<select class="form-control chosen-widget" id="depreciation" name="depreciation" data-placeholder="Select" required >
+											<option value=""></option>
+											<?php foreach($depreSh as $dep):?>
+												<option value="<?php echo $dep['id'];?>"><?php echo $dep['name'];?>
+											<?php endforeach;?>
+										</select>
+									</div>
+									<div class="form-group col-lg-6">
+										<label for="disposal" class="control-label"><em>Disposal Expense</em></label>
+										<select class="form-control chosen-widget" id="disposal" name="disposal" data-placeholder="Select" required >
+											<option value=""></option>
+											<?php foreach($depreSh as $dep):?>
+												<option value="<?php echo $dep['id'];?>"><?php echo $dep['name'];?>
+											<?php endforeach;?>
+										</select>
+									</div>
+									<div class="form-group col-lg-6">
+										<label for="subhead" class="control-label"><em>Fixed Asset</em></label>
+										<select class="form-control chosen-widget" id="subhead" name="subhead" data-placeholder="Select" required >
+											<option value=""></option>
+											<?php foreach ($assetSubheads as $sbh): ?>
+												<option value="<?php echo $sbh['id'];?>">
+													<?php echo $sbh['name'];?>
+												</option>
+											<?php endforeach; ?>
+										</select>
+									</div>
+									<div class="form-group col-lg-6">
+										<label for="writeoff" class="control-label"><em>Writeoff Expense</em></label>
+										<select class="form-control chosen-widget" id="writeoff" name="writeoff" data-placeholder="Select" required >
+											<option value=""></option>
+											<?php foreach($depreSh as $dep):?>
+												<option value="<?php echo $dep['id'];?>"><?php echo $dep['name'];?>
+											<?php endforeach;?>
+										</select>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
 				</div> 
             </div>
         </div>
@@ -82,22 +96,6 @@
 </form>
 <script>
 $(function(){
-	$('#classid').on('change',function(){
-	//	alert($('#class_id').val());
-		$.post(
-			"<?php echo $this->url('mastera', array('action' => 'getsubhead')); ?>",
-			{
-				class_id: $(this).val(),
-				
-			},
-			function(data){
-				console.log(data);	
-				$('#subhead').html(data.shead);	
-				$("#subhead").trigger("chosen:updated");			
-			},
-			'json'
-		);
-	});
 	const fv = FormValidation.formValidation(document.getElementById('#form'), {
 		fields: {
 			code: {

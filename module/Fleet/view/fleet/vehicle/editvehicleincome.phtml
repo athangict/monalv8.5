@@ -48,7 +48,13 @@ foreach($this->RMDObject->get(array('repair'=>$row['id'])) as $dtls);
 						   <div class="col-lg-12"> 
 							  <h4>Service Details</h4>
 								<div>
-									<table id="purchase_field" class="table small-padding">
+									<table id="purchase_field" class="table small-padding" style="table-layout:fixed; width:100%;">
+										<colgroup>
+											<col style="width:32%;">
+											<col style="width:32%;">
+											<col style="width:24%;">
+											<col style="width:12%;">
+										</colgroup>
 										<thead>
 											<tr>
 												<th>Head</th>
@@ -57,56 +63,52 @@ foreach($this->RMDObject->get(array('repair'=>$row['id'])) as $dtls);
 												<th>&nbsp;</th>
 											</tr>
 										</thead>
-										<tbody>	<?php foreach ($this->expense_details as $expense_detail):?>
-											<tr>
-											<td class="col-lg-3 input-cell">
-											 <input type="hidden" name="details_id[]" value="<?php echo $expense_detail['id'];?>" id="details_id">
-											 <input type="hidden"  class="tr_plate" value="<?php echo $expense_detail['license_plate'];?>" name="license_plate[]" id="license_plate" />
+										<tbody id="purchase_field_body">
+											<?php $rowIndex = 0; foreach ($this->expense_details as $expense_detail):?>
+											<tr id="<?php echo $rowIndex; ?>" data-detail-id="<?php echo $expense_detail['id']; ?>">
+												<td class="input-cell">
+													<input type="hidden" name="details_id[]" value="<?php echo $expense_detail['id'];?>" id="details_id">
+													<input type="hidden" class="tr_plate" value="<?php echo $expense_detail['license_plate'];?>" name="license_plate[]" id="license_plate" />
 													<div class="form-group">
-													<label for="item" class="control-label">Head</label>
-													<select class="form-control tr_service" name="service[]" id="service" data-placeholder="Select" required>
+														<select class="form-control tr_service" name="service[]" id="service" data-placeholder="Select" required>
 															<option value=""></option>
-															<?php  foreach($service as $services):?>
+															<?php foreach($service as $services):?>
 																<option value="<?php echo $services['id']; ?>" <?php echo ($expense_detail['service'] == $services['id'])?"selected":""; ?>>
-																<?php echo $services['code']; ?>
+																	<?php echo $services['code']; ?>
 																</option>
-																<?php endforeach;?>
+															<?php endforeach;?>
 														</select>
 													</div>
 												</td>
-												<td class="col-lg-3 input-cell">
+												<td class="input-cell">
 													<div class="form-group">
-													<label for="item" class="control-label">Subhead</label>
-													<select class="form-control tr_item" name="service_item[]" id="service_item" data-placeholder="Select" required>
-															<?php  foreach($subhead as $subheads):?>
+														<select class="form-control tr_item" name="service_item[]" id="service_item" data-placeholder="Select" required>
+															<?php foreach($subhead as $subheads):?>
 																<option value="<?php echo $subheads['id']; ?>" <?php echo ($expense_detail['service_item'] == $subheads['id'])?"selected":""; ?>>
-																<?php echo $subheads['name']; ?>
+																	<?php echo $subheads['name']; ?>
 																</option>
-																<?php endforeach;?>
+															<?php endforeach;?>
 														</select>
 													</div>
 												</td>
-												<td class="col-lg-2 input-cell">
+												<td class="input-cell">
 													<div class="form-group">
-													<label for="amount" class="control-label">Amount</label>
 														<input type="text" class="form-control tr_amount" name="amount[]" id="amount" value="<?php echo $expense_detail['amount'];?>" />
-													</div>         
+													</div>
 												</td>
-												<td>
-													<br>
-													<a class="btn btn-sm btn-danger" href="<?php echo $this->url('vehicle', array('action'=>'deleteincome', 'id'=>$expense_detail['id']));?>">
-															<i class="glyphicon-minus"></i>
-														</a>	
+												<td class="action-cell text-center">
+													<button class="btn btn-warning btn-xs resetRow" type="button" style="margin-top:5px;"><i class="fa fa-refresh"></i></button>
 												</td>
-												<?php endforeach;?>
-												<td>
-													<br>
-													<button class="btn btn-sm btn-success" type="button"  onclick="purchase_field();"> <span class="fa fa-plus-square" aria-hidden="true"></span> </button>
-												</td>
-											</tr> 
+											</tr>
+											<?php $rowIndex++; endforeach;?>
 										</tbody>
 										
-									</table>	
+									</table>
+									<div class="row">
+										<div class="col-lg-12">
+											<button value="Add" id="addRow" type="button" onclick="purchase_field(); return false;" class="pull-right btn btn-success btn-xs"><i class="fa fa-plus"></i> Add Row</button>
+										</div>
+									</div>
 									<div class="clear"></div>
 								</div>
 							</div>
@@ -144,7 +146,7 @@ foreach($this->RMDObject->get(array('repair'=>$row['id'])) as $dtls);
 										id="phone" value="<?php echo $dtls['phone']; ?>" placeholder="Phone No" />
 								</div>
 							</div>
-							<div class="col-lg-3" id="party" style="display:none;">
+							<div class="col-lg-3" id="party_wrap" style="display:none;">
 								<label for="party" class="col-md-4 col-form-label">Credit Customer</label>
 								<div class="col-md-8">
 									<select class="form-control" id="party" name="party">
@@ -157,12 +159,12 @@ foreach($this->RMDObject->get(array('repair'=>$row['id'])) as $dtls);
 									</select>
 								</div>
 							</div>
-							<div class="col-lg-3" id="cashacc" style="display:none;">
+							<div class="col-lg-3" id="cashacc_wrap" style="display:none;">
 								<label for="cashacc" class="col-md-4 col-form-label">Cash Account</label>
 								<div class="col-md-8">
 									<select class="form-control" id="cashacc" name="cashacc">
 									<option value="0"></option>
-									<?php foreach($this->cashaccObj->get(array('ca.location'=>$user_loc)) as $cashaccount):?>
+									<?php foreach($cashacc as $cashaccount):?>
 										<option value="<?php echo $cashaccount['id']; ?>" <?php echo ($dtls['cashacc'] == $cashaccount['id'])?"selected":""; ?>>
 										<?php echo $cashaccount['cash_account_code'].'_'.$cashaccount['cash_account_name'];?>
 										</option>
@@ -170,12 +172,12 @@ foreach($this->RMDObject->get(array('repair'=>$row['id'])) as $dtls);
 									</select>
 								</div>
 							</div>
-							<div class="col-lg-3" id="bankacc" style="display:none;">
+							<div class="col-lg-3" id="bankacc_wrap" style="display:none;">
 								<label for="bankacc" class="col-md-4 col-form-label">Bank Account</label>
 								<div class="col-md-8">
 									<select class="form-control" id="bankacc" name="bankacc">
 									<option value="0"></option>
-									<?php foreach($this->bankaccObj->get(array('ba.location'=>$user_loc)) as $bankaccount):?>
+									<?php foreach($bankacc as $bankaccount):?>
 										<option value="<?php echo $bankaccount['id']; ?>" <?php echo ($dtls['bankacc'] == $bankaccount['id'])?"selected":""; ?>>
 										<?php echo $bankaccount['code'].'_'.$bankaccount['account'];?>
 										</option>
@@ -183,7 +185,7 @@ foreach($this->RMDObject->get(array('repair'=>$row['id'])) as $dtls);
 									</select>
 								</div>
 							</div>
-							<div class="col-lg-3" id="ref_no" style="display:none;">
+							<div class="col-lg-3" id="ref_no_wrap" style="display:none;">
 								<label for="ref_no" class="col-md-4 col-form-label">Reference No</label>
 								<div class="col-md-8">
 									<input type="text" class="form-control" name="ref_no" value="0"
@@ -213,6 +215,7 @@ foreach($this->RMDObject->get(array('repair'=>$row['id'])) as $dtls);
 								<button type="button" class="btn btn-warning" onclick="javascript:history.back();" ><i class="fa fa-times"></i> Cancel </button> 					
 							</div>
 						</div>
+						<div id="deleted_detail_ids"></div>
 					</form>	
 				</div><!-- widget widget-main -->
 			</div>  <!-- widget widget-body -->   
@@ -221,24 +224,53 @@ foreach($this->RMDObject->get(array('repair'=>$row['id'])) as $dtls);
 </div><!-- row -->
 
 <script type="text/javascript">	 
-var room = 1;
-	function purchase_field() {
-    room++;
-    var objTo = document.getElementById('purchase_field');
-    var divtest = document.createElement('tr');
-    divtest.setAttribute('class', 'form-group removeclass' + room);
-    
-    divtest.innerHTML = 
-		'<tr><td class="col-lg-3 input-cell"><div class="form-group"><select id="service" name="service[]" class="form-control tr_service" data-placeholder="Select" required><option value="">Select</option><?php foreach($service as $services):?><option value="<?php echo $services['id'];?>"><?php echo $services['code'];?></option><?php endforeach;?></select></div><input type="hidden"  class="tr_plate" name="license_plate[]" id="license_plate" /></td><td class="col-lg-3 input-cell"><div class="form-group"><select id="service_item" name="service_item[]" class="form-control tr_item" data-placeholder="Select" required><option value="">Select</option><option value=""></option></select></div></td><td class="col-lg-1"><div class="form-group"><input type="text" class="form-control tr_amount" id="amount" name="amount[]"  value="" ></div></td><td class="col-lg-1 input-cell"><div class="input-group-btn"><button class="btn btn-sm btn-danger" type="button" onclick="remove_purchase_field(' + room + ');"><span class="glyphicon-minus" aria-hidden="true"></span></button></div></td><tr>';
-		objTo.appendChild(divtest);
-		calculateTotalAmount()
-    
+function purchase_reset(row) {
+	row.find('.tr_service').val('');
+	row.find('.tr_item').html('<option value=""></option>');
+	row.find('.tr_amount').val('0.00');
+	row.find('.tr_plate').val('');
+	calculateTotalAmount();
+}
+function purchase_actionbtn() {
+	if ($('#purchase_field_body tr').length > 1) {
+		var delBtn = "<button class='btn btn-warning btn-xs removeRow' type='button' style='margin-top:5px;'><i class='fa fa-times'></i></button>";
+		$('#purchase_field_body tr').each(function() {
+			$(this).find('td.action-cell').html(delBtn);
+		});
+	} else {
+		var resetBtn = "<button class='btn btn-warning btn-xs resetRow' type='button' style='margin-top:5px;'><i class='fa fa-refresh'></i></button>";
+		$('#purchase_field_body tr').each(function() {
+			$(this).find('td.action-cell').html(resetBtn);
+		});
 	}
-	function remove_purchase_field(rid) {
-	$('.removeclass' + rid).remove();
-	calculateTotalAmount()
-	
+}
+function purchase_field() {
+	var lastRow = parseInt($('#purchase_field_body tr:last').attr('id'), 10) || 0;
+	var clone = $('#purchase_field_body tr:first').clone(false);
+	clone.attr('id', ++lastRow);
+	clone.attr('data-detail-id', '0');
+	clone.find('#details_id').remove();
+	clone.find('.tr_plate').val('');
+	clone.find('.tr_item').html('<option value=""></option>');
+	clone.find('.tr_amount').val('0.00');
+	clone.find('.tr_service').val('');
+	$('#purchase_field_body').append(clone);
+	purchase_actionbtn();
+	calculateTotalAmount();
+}
+$(document).on('click', '.removeRow', function() {
+	var row = $(this).closest('tr');
+	var detailId = parseInt(row.attr('data-detail-id'), 10) || 0;
+	if (detailId > 0) {
+		$('#deleted_detail_ids').append('<input type="hidden" name="deleted_details_id[]" value="' + detailId + '">');
 	}
+	row.remove();
+	purchase_actionbtn();
+	calculateTotalAmount();
+});
+$(document).on('click', '.resetRow', function() {
+	purchase_reset($(this).closest('tr'));
+});
 $(document).on('change', '.tr_service, .location', function() {
     var selectedService = $(this).closest('tr').find('.tr_service').val();
     var selectedLocation = $('#location').val();
@@ -273,6 +305,40 @@ $(document).on('change', '.tr_service, .tr_item', function() {
 		 },
         'json'
     );  
+});
+function refreshEditPaymentOptionsByLocation() {
+	var selectedLocation = $('#location').val();
+	var selectedParty = $('select[name="party"]').val();
+	var selectedBank = $('select[name="bankacc"]').val();
+	var selectedCash = $('select[name="cashacc"]').val();
+	$.post(
+		"<?php echo $this->url('vehicle', array('action' => 'getlocationhead')); ?>",
+		{
+			locationId: selectedLocation,
+			headScope: 'income',
+		},
+		function(data) {
+			if (typeof data.party !== 'undefined') {
+				$('select[name="party"]').html(data.party);
+				$('select[name="party"]').val(selectedParty);
+				$('select[name="party"]').trigger('chosen:updated');
+			}
+			if (typeof data.bank !== 'undefined') {
+				$('select[name="bankacc"]').html(data.bank);
+				$('select[name="bankacc"]').val(selectedBank);
+				$('select[name="bankacc"]').trigger('chosen:updated');
+			}
+			if (typeof data.cash !== 'undefined') {
+				$('select[name="cashacc"]').html(data.cash);
+				$('select[name="cashacc"]').val(selectedCash);
+				$('select[name="cashacc"]').trigger('chosen:updated');
+			}
+		},
+		'json'
+	);
+}
+$('#location').on('change', function() {
+	refreshEditPaymentOptionsByLocation();
 });
 	
 	$(document).on('input', '.tr_amount,.tr_quantity', function () {
@@ -309,8 +375,11 @@ $(document).on('change', '.tr_service, .tr_item', function() {
 
 		// Update the #total field with the new sum
 		$('#rm_amount').val(total.toFixed(2));
-	}	
+	}
+	purchase_actionbtn();
+	calculateTotalAmount();
     $(function(){
+	  refreshEditPaymentOptionsByLocation();
 	  $('#transport').on('change',function(){
 		//alert($(this).val()); 
 		$.post(
@@ -332,28 +401,31 @@ $(document).on('change', '.tr_service, .tr_item', function() {
         if ($(this).val() == "0") {
 			$('#journal').show();
 			 $('#phone').show();
-			 $('#party').hide();
-			 $('#ref_no').hide();
-			 $('#bankacc').show();
-			 $('#cashacc').hide();
+			 $('#party_wrap').hide();
+			 $('#ref_no_wrap').hide();
+			 $('#bankacc_wrap').show();
+			 $('#cashacc_wrap').hide();
         } 
 		else if($(this).val() == "1"){
 			$('#journal').hide();
 			 $('#phone').hide();
-			 $('#party').hide();
-			 $('#ref_no').hide();
-			 $('#bankacc').hide();
-			 $('#cashacc').show();
+			 $('#party_wrap').hide();
+			 $('#ref_no_wrap').hide();
+			 $('#bankacc_wrap').hide();
+			 $('#cashacc_wrap').show();
 		}else {
            $('#journal').hide();
 			 $('#phone').hide();
-			 $('#party').show();
-			 $('#ref_no').show();
-			 $('#bankacc').hide();
-			 $('#cashacc').hide();
+			 $('#party_wrap').show();
+			 $('#ref_no_wrap').show();
+			 $('#bankacc_wrap').hide();
+			 $('#cashacc_wrap').hide();
         } 
     });
-	$('input[type=radio][name=cash]').trigger('change');
+	var selectedPayment = $('input[type=radio][name=cash]:checked');
+	if (selectedPayment.length > 0) {
+		selectedPayment.trigger('change');
+	}
 	    /*** Form Validation of RM ***/
 
 	/*	const fv = FormValidation.formValidation(document.getElementById('#form'), {

@@ -117,7 +117,11 @@ class ButtonHelper extends AbstractHelper //implements ServiceLocatorAwareInterf
 					$status_array = ($status_array!=NULL)?$status_array:array(0);
 					$display = ($display!=NULL)?$display:1;
 					$button ="";
-					foreach($this->aclTable->renderButton(array('a.id' => $action_id), $user_role,$highestRole) as $row):
+					$action_filter = array('a.id' => $action_id);
+					if((string)$action_id === '3' || (string)$action_id === 'activitylog'):
+						$action_filter = array('route' => 'application', 'action' => 'activitylog');
+					endif;
+					foreach($this->aclTable->renderButton($action_filter, $user_role,$highestRole) as $row):
 						if(in_array($status,$status_array)):
 							if($display==1):
 								$modal ="";

@@ -97,7 +97,7 @@ $minYear = date('Y', strtotime($minYear)); ?>
 			<tbody>
 				<?php $i=1+(($page-1)*25); foreach ($paginator as $row):
 				 //echo '<pre>';print_r($paginator);
-				if($role==100 ||$role==99)://role 3,99,100 should be given access
+				if(!empty($row['can_view'])):
 					 //echo '<pre>';print_r($paginator);//exit;
 					if($row['voucher_id']==11)://2==credit Voucher?>
 						<tr data-href="<?php echo $this->button(4,$row['id']); ?>">
@@ -118,74 +118,6 @@ $minYear = date('Y', strtotime($minYear)); ?>
 						</tr>
 				    <?php 
 				    endif;
-				elseif($role==2 && $user==$row['author']):
-					 //echo '<pre>';print_r($paginator);//exit;
-					if($row['voucher_id']==11)://2==credit Voucher?>
-						<tr data-href="<?php echo $this->button(4,$row['id']); ?>">
-							<td><?php echo $i++; ?> </td>
-							<td> 
-								<b><?php echo $row['voucher_no'];?>&nbsp;</b> 
-								<span style="color:#666;font-size:95%;"><?php echo $row['voucher_date'];?></span>
-								<span class="label label-info"><?php echo $row['voucher_type'];?> voucher</span>
-								<?php echo $this->status($row['status']);?>
-							</td>
-							<td>
-								<?php 
-								if($row['voucher_id'] == 15):
-									echo"<span class='label label-info'> Opening Balance </span>";
-								else:
-									echo $this->currency($row['voucher_amount']);
-								endif;?>
-							</td>
-						</tr>
-				    <?php 
-				    endif;
-				elseif($role==5 && $row['status']==3):
-				    $voucher_main_id= $this->voucherObj->getColumn($row['voucher_id'],'voucher_main');
-					 //echo '<pre>';print_r($paginator);//exit;
-					if($row['voucher_id']==11)://2==credit Voucher?>
-						<tr data-href="<?php echo $this->button(4,$row['id']); ?>">
-							<td><?php echo $i++; ?> </td>
-							<td> 
-								<b><?php echo $row['voucher_no'];?>&nbsp;</b> 
-								<span style="color:#666;font-size:95%;"><?php echo $row['voucher_date'];?></span>
-								<span class="label label-info"><?php echo $row['voucher_type'];?> voucher</span>
-								<?php echo $this->status($row['status']);?>
-							</td>
-							<td>
-								<?php 
-								if($row['voucher_id'] == 15):
-									echo"<span class='label label-info'> Opening Balance </span>";
-								else:
-									echo $this->currency($row['voucher_amount']);
-								endif;?>
-							</td>
-						</tr>
-					<?php  
-					endif;
-				elseif($role==3 && $row['status']==6):
-				    $voucher_main_id= $this->voucherObj->getColumn($row['voucher_id'],'voucher_main');
-					 //echo '<pre>';print_r($paginator);//exit;
-					if($row['voucher_id']==11)://2==credit Voucher?>
-						<tr data-href="<?php echo $this->button(4,$row['id']); ?>">
-							<td><?php echo $i++; ?> </td>
-							<td> 
-								<b><?php echo $row['voucher_no'];?>&nbsp;</b> 
-								<span style="color:#666;font-size:95%;"><?php echo $row['voucher_date'];?></span>
-								<span class="label label-info"><?php echo $row['voucher_type'];?> voucher</span>
-								<?php echo $this->status($row['status']);?>
-							</td>
-							<td>
-								<?php 
-								if($row['voucher_id'] == 15):
-									echo"<span class='label label-info'> Opening Balance </span>";
-								else:
-									echo $this->currency($row['voucher_amount']);
-								endif;?>
-							</td>
-						</tr>
-					<?php 
-					endif;
 			    endif;
 				endforeach;//exit;?>
 			</tbody>
@@ -206,4 +138,3 @@ $minYear = date('Y', strtotime($minYear)); ?>
 		orentation:"P",//L =landscape, P = potrait
 	});
 </script>
-

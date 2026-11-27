@@ -30,7 +30,7 @@
 									<label for="location" class="control-label">Location</label>
 									<select id="location" name="location" class="form-control" data-placeholder="Select" required>
 										<option value=""></option>
-										<?php foreach ($this->locationObj->getAll() as $locations):?>
+										<?php foreach ($permitted_locations as $locations):?>
 										 <option value="<?php echo $locations['id']; ?>">
 											<?php echo $locations['location']; ?>
 										 </option>
@@ -45,7 +45,7 @@
 											foreach ($head as $heads):
 										?>
 										 <option value="<?php echo $heads['id']; ?>">
-											<?php echo $heads['code']; ?>
+											<?php echo $this->escapeHtml($heads['code'].' - '.$heads['name']); ?>
 										 </option>
 										<?php endforeach;?>								
 									</select> 
@@ -198,25 +198,15 @@
 								</div>
 							</div>
 							 <div class="row col-lg-12"> 	
-								<div class="col-lg-3"> </div>
-								<div class="col-lg-3">
-										<div class="form-group">
-											<label for="patyhead" class="control-label">Head</label>
-												<select class="form-control" name="patyhead" id="patyhead" data-placeholder="patyhead" required>
-													<option value=""></option>
-													<?php  foreach($head1 as $heads):?>
-														<option value="<?php echo $heads['id']; ?>">
-														<?php echo $heads['name']; ?>
-														</option>
-														<?php endforeach;?>
-												</select>
-										</div>
-									</div>	
+								<div class="col-lg-6"> </div>
 									<div class="col-lg-3">
 										<div class="form-group">
 											<label for="party" class="control-label">Party</label>
 												<select class="form-control" name="party" id="party" data-placeholder="Select" required>
 													<option value=""></option>
+													<?php foreach ($party as $transportParty): ?>
+														<option value="<?php echo $this->escapeHtmlAttr($transportParty['id']); ?>"><?php echo $this->escapeHtml($transportParty['name']); ?></option>
+													<?php endforeach; ?>
 												</select>
 										</div>
 									</div>
@@ -304,26 +294,11 @@
 				{
 					locationId: $('#location').val(),
 					headId: $('#head').val(),
+					includeService: 1,
 				},
 				function(data){
 					$('select#subhead').html(data.transport);
 					$(subhead).trigger('chosen:updated');
-
-				   },
-				'json'
-			);
-	    });
-		$('select#patyhead').on('change',function(){
-		//alert($(this).val()); 
-		$.post(
-				"<?php echo $this->url('pol', array('action' => 'getsubhead'));?>",
-				{
-					headId: $(this).val(),
-				},
-				function(data){
-					console.log(data);
-					$('select#party').html(data.subheads);
-					$(party).trigger('chosen:updated');
 
 				   },
 				'json'
@@ -985,3 +960,4 @@
 	});*/  
 //});  
 </script>
+

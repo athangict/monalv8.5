@@ -45,10 +45,7 @@ if(sizeof($checkleaveOfficial) >0 && sizeof($this->encashDtls)>0){
 	<div class="col-lg-12">
 		<div class="widget-box transparent ">
 			<div class="widget-header widget-header-large">
-			       <a class="btn btn-xs btn-danger" data-toggle="modal" data-target="#modal" 
-				   href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "23-".$row['id'])); ?>" title="View Activity Logs">
-							<i class="ace-icon fa fa-plus smaller-120" ></i>  
-				   </a>
+			       <?php echo $this->button(6, "23-".$row['id'], 0, 3);?>
 				   &nbsp;&nbsp;
 				<h3 class="widget-title grey lighter">
 					Leave Encashment Application &nbsp;&nbsp; <span class="orange">Dated:-<?php echo !empty($row['encash_date']) ? date('d-m-y',strtotime($row['encash_date'])) : '-';?></span>

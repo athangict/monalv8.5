@@ -17,16 +17,22 @@ class StatusHelper extends AbstractHelper
 		$this->statusTable = $statusTable;
 	}
 	
-	public function __invoke($status,$style=NULL,$size=NULL)
+	public function __invoke($status,$style=NULL,$size=NULL,$customLabel=NULL)
 	{
-
-		foreach($this->statusTable->get($status) as $row);
+		$row = NULL;
+		foreach($this->statusTable->get($status) as $statusRow):
+			$row = $statusRow;
+		endforeach;
 		switch($status):
 			case 0:
-				echo "<span class='label label-danger'>Blocked</span>";
+				$labelText = ($customLabel !== NULL && $customLabel !== '') ? $customLabel : 'Blocked';
+				echo "<span class='label label-danger'>".$labelText."</span>";
 				break;
 			default:
-				echo "<span class='label label-".$row['label']."'>".$row['status']."</span>";
+				if($row):
+					$statusText = ($customLabel !== NULL && $customLabel !== '') ? $customLabel : $row['status'];
+					echo "<span class='label label-".$row['label']."'>".$statusText."</span>";
+				endif;
 				break;
 		endswitch;
 	}

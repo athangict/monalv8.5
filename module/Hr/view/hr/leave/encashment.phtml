@@ -57,7 +57,13 @@ $currentYear=date('Y');
 							<td><?php echo $row['payment_amount']; ?></td>
 							<td><?php echo $row['deduction']; ?></td>
 							<td ><?php echo $this->status($row['status']); ?></td>
-							<td><?php echo $this->button(1,$row['id']); echo $this->button(6,$row['id'],'','911'); echo $this->button(6,"520-".$row['id'],'','3');?></td>
+							<td>
+								<?php
+									echo $this->button(1, $row['id']);
+									echo $this->button(6, $row['id'], '', '911');
+									echo $this->button(6, "520-".$row['id'], '', '3');
+								?>
+							</td>
 						</tr>
 					<?php 
 					$i++;

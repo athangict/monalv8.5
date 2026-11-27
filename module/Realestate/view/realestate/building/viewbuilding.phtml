@@ -15,6 +15,18 @@
 foreach ($buildings as $building):
 	extract($building);
 endforeach;
+$assetNo = $this->assetObj->getColumn($asset,'assetid');
+if ($assetNo === '') {
+	$assetNo = $this->buildingsmaster->getColumn($asset,'building_id');
+}
+$assetName = $this->assetObj->getColumn($asset,'name');
+if ($assetName === '') {
+	$assetName = $this->buildingsmaster->getColumn($asset,'name');
+}
+$custodian = $this->assetObj->getColumn($asset,'custodian');
+if ($custodian === '') {
+	$custodian = $this->buildingsmaster->getColumn($asset,'custodian');
+}
 ?>
 <div class="row">
 	<div class="col-lg-12">
@@ -33,12 +45,12 @@ endforeach;
 							<ul class="list-unstyled spaced">
 								<li>
 									<i class="ace-icon fa fa-caret-right blue"></i>
-									Building No : <b class="red"><?php echo $this->buildingsmaster->getColumn($asset,'building_id'); ?></b>
+									Building No : <b class="red"><?php echo $assetNo; ?></b>
 								</li>
 
 								<li>
 									<i class="ace-icon fa fa-caret-right blue"></i>
-									Building : <b class="red"><?php echo $this->buildingsmaster->getColumn($asset,'name'); ?></b>
+									Building : <b class="red"><?php echo $assetName; ?></b>
 								</li>
 
 								<li>
@@ -47,7 +59,6 @@ endforeach;
 								</li>
 								<li>
 									<i class="ace-icon fa fa-caret-right blue"></i>
-									<?php $custodian=$this->buildingsmaster->getColumn($asset,'custodian');?>
 									Custodian. : <b class="red"><?php echo $this->employeeObj->getColumn($custodian,'full_name'); ?></b>
 								</li>
 							</ul>

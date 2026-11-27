@@ -79,9 +79,7 @@
 				        <td><?php echo $row['payable_amount'];?></td>
 				       	<td class="action">
 							<div class="btn-group">
-								<a data-toggle="modal" data-target = "#modal" class="btn btn-xs btn-danger" href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "8-".$row['id'])); ?>" title="View Activity Logs">
-									<i class="ace-icon fa fa-plus bigger-120" ></i>  
-								</a>
+								<?php echo $this->button(6, "8-".$row['id'], 0, 3);?>
 							</div>
 						</td>
 				    </tr>   

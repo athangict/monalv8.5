@@ -113,7 +113,7 @@ class MovingItemTable extends AbstractTableGateway
 	
 		$selectString = $sql->getSqlStringForSqlObject($select);
 		$results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();
-	
+		$columns = '';
 		foreach ($results as $result):
 		$columns =  $result[$column];
 		endforeach;

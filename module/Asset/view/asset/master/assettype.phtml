@@ -16,26 +16,38 @@
 		<table class="table card-table table-vcenter text-nowrap datatable" id="dataTables">
 			<thead>
 				<tr>
-					<th>#</th>
-					<th>Name</th>
-					<th>Code</th>
-					<th>Class</th>
-					<th>Ledger</th>
-					<th>Status</th>
+					<th rowspan="2">#</th>
+					<th rowspan="2">Name</th>
+					<th rowspan="2">Code</th>
+					<th colspan="4" class="text-center">Accounts Mapping</th>
+					<th rowspan="2">Status</th>
 					<?php if($this->button(1)!=""):?>
-						<th class="no-sort no-printpdf">Action</th>
+						<th rowspan="2" class="no-sort no-printpdf">Action</th>
 					<?php endif;?>	
+				</tr>
+				<tr>
+					<th>Fixed Asset</th>
+					<th>Depreciation Expense</th>
+					<th>Disposal Expense</th>
+					<th>Writeoff Expense</th>
 				</tr>
 			</thead>
 			<tbody>
 			<?php $i=1+(($page-1)*20); foreach ($paginator as $row):
+				$notMapped = '<small><em class="text-muted">Accounts not mapped</em></small>';
+				$fixedAssetName = !empty($row['subhead']) ? $this->subheadObj->getColumn($row['subhead'],'name') : '';
+				$depreciationName = !empty($row['dep_subhead']) ? $this->subheadObj->getColumn($row['dep_subhead'],'name') : '';
+				$disposalName = !empty($row['disposal_subhead']) ? $this->subheadObj->getColumn($row['disposal_subhead'],'name') : '';
+				$writeoffName = !empty($row['writeoff_subhead']) ? $this->subheadObj->getColumn($row['writeoff_subhead'],'name') : '';
 				//echo '<pre>';print_r($paginator);exit;?>
 				<tr>
 					<td><?php  echo $i++; ?></td>								       
 					<td class="fw-bold"><?php echo $row['name'];?></td>
 					<td><?php echo $row['code']; ?></td>
-					<td><?php echo $this->classObj->getColumn($row['class'],'name'); ?></td>
-					<td><?php echo $this->subheadObj->getColumn($row['subhead'],'name'); ?></td>
+					<td><?php echo !empty($fixedAssetName) ? $fixedAssetName : $notMapped; ?></td>
+					<td><?php echo !empty($depreciationName) ? $depreciationName : $notMapped; ?></td>
+					<td><?php echo !empty($disposalName) ? $disposalName : $notMapped; ?></td>
+					<td><?php echo !empty($writeoffName) ? $writeoffName : $notMapped; ?></td>
 					<td class="fw-bold"><?php echo $this->status($row['status']);?></td>
 					<?php if($this->button(1)!=""):?>
 						<td><?php echo $this->button(1, $row['id'].'_'.$page);?></td>

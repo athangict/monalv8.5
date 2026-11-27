@@ -50,7 +50,13 @@
 						   <div class="col-lg-12"> 
 							  <h4>Service Details</h4>
 								<div>
-									<table id="purchase_field" class="table small-padding">
+									<table id="purchase_field" class="table small-padding" style="table-layout:fixed; width:100%;">
+										<colgroup>
+											<col style="width:36%;">
+											<col style="width:36%;">
+											<col style="width:24%;">
+											<col style="width:4%;">
+										</colgroup>
 										<thead>
 											<tr>
 												<th>Head</th>
@@ -59,11 +65,10 @@
 												<th>&nbsp;</th>
 											</tr>
 										</thead>
-										<tbody>
-											<tr>
-												<td class="col-lg-3 input-cell">
+										<tbody id="purchase_field_body">
+											<tr id="0">
+												<td class="input-cell">
 													<div class="form-group">
-													<label for="item" class="control-label">Head</label>
 														<select class="form-control tr_service" name="service[]" id="service" data-placeholder="Select" required>
 															<option value=""></option>
 															<?php  foreach($head as $services):?>
@@ -75,61 +80,55 @@
 													</div>
 													<input type="hidden"  class="tr_plate" name="license_plate[]" id="license_plate" />
 												</td>
-												<td class="col-lg-3 input-cell">
+												<td class="input-cell">
 													<div class="form-group">
-													<label for="item" class="control-label">Subhead</label>
 													<select class="form-control tr_item" name="service_item[]" id="service_item" data-placeholder="Select" required>
 															<option value=""></option>
 													</select>
 													</div>
 												</td>
-												<td class="col-lg-2 input-cell">
+												<td class="input-cell">
 													<div class="form-group">
-													<label for="amount" class="control-label">Amount</label>
 														<input type="text" class="form-control tr_amount" name="amount[]" id="amount" value="0.00" />
 													</div>         
 												</td>
-												<td>
-													<br>
-													<button class="btn btn-sm btn-success" type="button"  onclick="purchase_field();"> <span class="fa fa-plus-square" aria-hidden="true"></span> </button>
+												<td class="input-cell text-center">
+													<a value="Reset" class="btn btn-warning btn-xs resetRow" style="margin-top:5px;" onclick="purchase_reset($(this).closest('tr'));"><i class="fa fa-refresh"></i></a>
 												</td>
 											</tr> 
 										</tbody>
 										
 									</table>	
+									<div class="row"> 
+										<div class="col-lg-12">
+											<button value="Add" id="addRow" type="button" onclick="purchase_field(); return false;" class="pull-right btn btn-success btn-xs"><i class="fa fa-plus"></i> Add Row</button>
+										</div>
+									</div>
 									<div class="clear"></div>
 								</div>
 							</div>
 						</div>	
 						<div class="row">
-						    <div class="col-lg-3">
-							    <div class="form-group">
-									<label for="heads" class="control-label">Head</label>
-										<select class="form-control" name="heads" id="heads" data-placeholder="Select" required>
-											<option value=""></option>
-											<?php  foreach($heads as $h):?>
-												<option value="<?php echo $h['id']; ?>">
-												<?php echo $h['name']; ?>
-												</option>
-												<?php endforeach;?>
-										</select>
-								</div>
-							</div>
-							<div class="col-lg-3">
+							<div class="col-lg-4">
 								<div class="form-group">
 								    <label for="ref_no" class="control-label">Party</label>
 									<select id="party" name="party" class="form-control" data-placeholder="Select" required>
 										<option value=""></option>
+										<?php foreach($party as $partys):?>
+											<option value="<?php echo $partys['id']; ?>">
+												<?php echo $partys['name']; ?>
+											</option>
+										<?php endforeach;?>
 									</select>
 								</div>
 							</div>
-							<div class="col-lg-3">
+							<div class="col-lg-4">
 								<div class="form-group">
 									<label for="ref_no" class="control-label">Reference Number</label>
 									<input type="text" class="form-control" name="ref_no" id="ref_no" value ="0.00" placeholder="Reference No" > 
 								</div>
 							</div>
-						    <div class="col-lg-3">
+						    <div class="col-lg-4">
 								<div class="form-group">
 									<label for="rm_amount" class="control-label">Total Amount</label>
 									<input type="text" class="form-control" name="rm_amount" id="rm_amount" value ="0.00" placeholder="Amount" readonly > 
@@ -155,41 +154,91 @@
 </div><!-- row -->
 
 <script type="text/javascript">	
- $('#heads').on('change',function(){
-	//alert($(this).val());
+$('#date').datepicker(); 
+function purchase_reset(row) {
+	row.find('.tr_service').val('').trigger('chosen:updated');
+	row.find('.tr_item').html('<option value=""></option>').trigger('chosen:updated');
+	row.find('.tr_amount').val('0.00');
+	row.find('.tr_plate').val('');
+	calculateTotalAmount();
+}
+function purchase_actionbtn() {
+	if ($('#purchase_field_body tr').length > 1) {
+		var delBtn = "<a value='Delete' class='btn btn-warning btn-xs delRow' style='margin-top:5px;'><i class='fa fa-times'></i></a>";
+		$('#purchase_field_body tr').each(function() {
+			$(this).find('td:last').html(delBtn);
+		});
+		$('#purchase_field_body td a.delRow').each(function() {
+			$(this).off('click').on('click', function() {
+				remove_purchase_field($(this).closest('tr'));
+			});
+		});
+	} else {
+		var resetBtn = "<a value='Reset' class='btn btn-warning btn-xs resetRow' style='margin-top:5px;'><i class='fa fa-refresh'></i></a>";
+		$('#purchase_field_body tr').each(function() {
+			$(this).find('td:last').html(resetBtn);
+		});
+		$('#purchase_field_body td a.resetRow').each(function() {
+			$(this).off('click').on('click', function() {
+				purchase_reset($(this).closest('tr'));
+			});
+		});
+	}
+}
+function purchase_field() {
+	var lastRow = parseInt($('#purchase_field_body tr:last').attr('id'), 10) || 0;
+	var tmplt_row = $('#purchase_field_body tr:first').clone(false);
+	var clone = tmplt_row.clone();
+	clone.find('div.chosen-container').remove();
+	clone.find('select').each(function() {
+		$(this).removeClass('chosen-done').show();
+		$(this).next('.chosen-container').remove();
+	});
+	clone.attr('id', ++lastRow);
+	clone.find(':input').each(function() {
+		var old_id = $(this).attr('id');
+		if (!old_id) {
+			return;
+		}
+		var new_id = (old_id.lastIndexOf('-') > 0) ? old_id.substr(0, old_id.lastIndexOf('-')) : old_id;
+		$(this).attr('id', new_id + '-' + lastRow);
+		$(this).addClass('tr-' + new_id);
+	});
+	$('#purchase_field_body').append(clone);
+	purchase_reset(clone);
+	if ($.fn.chosen) {
+		clone.find('select').chosen();
+	}
+	purchase_actionbtn();
+}
+function remove_purchase_field(row) {
+	row.remove();
+	purchase_actionbtn();
+	calculateTotalAmount();
+}
+function refreshHeadByLocation() {
+	var selectedLocation = $('#location').val();
 	$.post(
-		'<?php echo $this->url('vehicle', array('action' => 'getsubhead')); ?>',
+		"<?php echo $this->url('vehicle', array('action' => 'getlocationhead')); ?>",
 		{
-			headId: $(this).val(),
+			locationId: selectedLocation,
 		},
-		function(data){
-			console.log(data);	
-			$('#party').html(data.subhead);	
-			$("#party").trigger("chosen:updated");			
+		function(data) {
+			$('#purchase_field_body .tr_service').each(function() {
+				$(this).html(data.head);
+				$(this).val('');
+				$(this).trigger('chosen:updated');
+				$(this).closest('tr').find('.tr_item').html('<option value=""></option>').trigger('chosen:updated');
+				$(this).closest('tr').find('.tr_plate').val('');
+			});
 		},
 		'json'
 	);
+}
+$('#location').on('change', function() {
+	refreshHeadByLocation();
 });
-$('#date').datepicker(); 
-var room = 1;
-	function purchase_field() {
-    room++;
-    var objTo = document.getElementById('purchase_field');
-    var divtest = document.createElement('tr');
-    divtest.setAttribute('class', 'form-group removeclass' + room);
-    
-    divtest.innerHTML = 
-		'<tr><td class="col-lg-3 input-cell"><div class="form-group"><select id="service" name="service[]" class="form-control tr_service" data-placeholder="Select" required><option value="">Select</option><?php foreach($head as $services):?><option value="<?php echo $services['id'];?>"><?php echo $services['code'];?></option><?php endforeach;?></select></div><input type="hidden"  class="tr_plate" name="license_plate[]" id="license_plate" /></td><td class="col-lg-3 input-cell"><div class="form-group"><select id="service_item" name="service_item[]" class="form-control tr_item" data-placeholder="Select" required><option value="">Select</option></select></div></td></td><td class="col-lg-1"><div class="form-group"><input type="text" class="form-control tr_amount" id="amount" name="amount[]"  value="" ></div></td><td class="col-lg-1 input-cell"><div class="input-group-btn"><button class="btn btn-sm btn-danger" type="button" onclick="remove_purchase_field(' + room + ');"><span class="glyphicon-minus" aria-hidden="true"></span></button></div></td><tr>';
-		objTo.appendChild(divtest);
-		calculateTotalAmount()
-    
-	}
-	function remove_purchase_field(rid) {
-	$('.removeclass' + rid).remove();
-	calculateTotalAmount()
-	
-	}
-$(document).on('change', '.tr_service, .location', function() {
+$(document).on('change', '.tr_service', function() {
     var selectedService = $(this).closest('tr').find('.tr_service').val();
     var selectedLocation = $('#location').val();
     var relatedItemElement = $(this).closest('tr').find('.tr_item');
@@ -273,7 +322,9 @@ $(document).on('change', '.tr_service, .tr_item', function() {
 
 		// Update the #total field with the new sum
 		$('#rm_amount').val(total.toFixed(2));
-	}	
+	}
+	purchase_actionbtn();
+		refreshHeadByLocation();
     $(function(){
 	  $('#transport').on('change',function(){
 		//alert($(this).val()); 

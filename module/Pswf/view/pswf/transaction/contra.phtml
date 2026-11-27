@@ -83,9 +83,9 @@ $minYear = date('Y', strtotime($minYear)); ?>
 			</thead>
 			<tbody>
 				<?php $i=1+(($page-1)*25); foreach ($paginator as $row):
-				if($user==$row['author'] || $role==100 ||$role==99||$role==3||$role==5)://role 3,99,100 should be given access
+				if(!empty($row['can_view'])):
 					if($row['voucher_id']==1)://4==Contra Voucher?>
-						<tr>
+						<tr data-href="<?php echo $this->button(4,$row['id']); ?>">
 							<td><?php echo $i++; ?> </td> 
 							<td>
 								<b><?php echo $row['voucher_no'];?>&nbsp;</b> 
@@ -100,7 +100,7 @@ $minYear = date('Y', strtotime($minYear)); ?>
 									echo $this->currency($row['voucher_amount']);
 								endif;?>
 							</td>
-							<td><?php echo $this->button(1,$row['id']);?><?php if($role==100 ||$role==99):echo $this->button(6,$row['id'],'','773');endif;?></td>
+							<td><?php echo $this->button(1,$row['id']);?></td>
 						</tr>
 				    <?php 
 				    endif;
@@ -146,4 +146,3 @@ $minYear = date('Y', strtotime($minYear)); ?>
 		orentation:"P",//L =landscape, P = potrait
 	});
 </script>
-

@@ -32,6 +32,79 @@ class IssueController extends AbstractActionController
     protected $_id; 		// route parameter id, usally used by crude
     protected $_auth; 		// checking authentication
     protected $_safedataObj; //safedata controller plugin
+
+    private function getIssueItemData($itemId)
+    {
+    	$itemId = (int)$itemId;
+    	if($itemId <= 0):
+    		return array();
+    	endif;
+
+    	$items = $this->getDefinedTable(Store\ItemTable::class)->get($itemId);
+    	if(sizeof($items) > 0):
+    		foreach($items as $item):
+    			$item['_source'] = 'store';
+    			return $item;
+    		endforeach;
+    	endif;
+
+    	$stockItems = $this->getDefinedTable(Stock\ItemTable::class)->get($itemId);
+    	if(sizeof($stockItems) > 0):
+    		foreach($stockItems as $stockItem):
+    			$stockItem['_source'] = 'stock';
+    			return $stockItem;
+    		endforeach;
+    	endif;
+
+    	return array();
+    }
+
+    private function getItemLocationStockSummary($itemGroup, $itemId, $locationId)
+    {
+    	$itemGroup = (int)$itemGroup;
+    	$itemId = (int)$itemId;
+    	$locationId = (int)$locationId;
+    	if($itemId <= 0 || $locationId <= 0):
+    		return array('quantity' => 0, 'rate' => 0);
+    	endif;
+
+    	if($itemGroup == 1):
+    		$sql = "SELECT COALESCE(SUM(ad.quantity),0) AS quantity, COALESCE(AVG(ad.rate),0) AS rate
+    				FROM in_asset_dtls ad
+    				INNER JOIN in_asset a ON a.id = ad.asset
+    				WHERE a.item = {$itemId} AND ad.location = {$locationId}";
+    	else:
+    		$sql = "SELECT COALESCE(SUM(sd.quantity),0) AS quantity, COALESCE(AVG(sd.rate),0) AS rate
+    				FROM in_storespare_details sd
+    				INNER JOIN in_storespare s ON s.id = sd.storespare
+    				WHERE s.item = {$itemId} AND sd.location = {$locationId}";
+    	endif;
+
+    	$results = $this->_container->get('Laminas\Db\Adapter\Adapter')->query($sql, 'execute')->toArray();
+    	if(sizeof($results) > 0):
+    		return $results[0];
+    	endif;
+
+    	return array('quantity' => 0, 'rate' => 0);
+    }
+
+    private function getOpeningStockSummary($itemId, $locationId)
+    {
+    	$itemId = (int)$itemId;
+    	$locationId = (int)$locationId;
+    	if($itemId <= 0 || $locationId <= 0):
+    		return array('quantity' => 0, 'rate' => 0);
+    	endif;
+    	$sql = "SELECT COALESCE(SUM(od.quantity),0) AS quantity, COALESCE(AVG(od.selling_price),0) AS rate
+    			FROM st_opening_stock_dtls od
+    			INNER JOIN st_opening_stock o ON o.id = od.opening_stock
+    			WHERE o.item = {$itemId} AND od.location = {$locationId}";
+    	$results = $this->_container->get('Laminas\Db\Adapter\Adapter')->query($sql, 'execute')->toArray();
+    	if(sizeof($results) > 0):
+    		return $results[0];
+    	endif;
+    	return array('quantity' => 0, 'rate' => 0);
+    }
     
 	public function __construct(ContainerInterface $container)
     {
@@ -141,16 +214,33 @@ class IssueController extends AbstractActionController
 		if($this->getRequest()->isPost()):
 			$request= $this->getRequest();
 			$form = $request->getPost();
+			$item = isset($form['item']) ? $form['item'] : array();
+			$from_balance = isset($form['from_balance']) ? $form['from_balance'] : array();
+			$quantity = isset($form['quantity']) ? $form['quantity'] : array();
+			if(sizeof($item) == 0):
+				$this->flashMessenger()->addMessage("error^ Please add at least one item for stock issuance.");
+				return $this->redirect()->toRoute('inissue',array('action'=>'addissue'));
+			endif;
+			for($i = 0; $i < sizeof($item); $i++):
+				if(isset($item[$i], $quantity[$i], $from_balance[$i]) && is_numeric($quantity[$i]) && is_numeric($from_balance[$i]) && (float)$quantity[$i] > (float)$from_balance[$i]):
+					$this->flashMessenger()->addMessage("error^ Issue quantity must be less than or equal to stock quantity.");
+					return $this->redirect()->toRoute('inissue',array('action'=>'addissue'));
+				endif;
+			endfor;
              
 			$location_prefix = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($form['from_location'],'prefix');
 			$date = date('ym',strtotime($form['issue_date']));
 			$tmp_INo = $location_prefix."DC".$date;
-			$results = $this->getDefinedTable(Store\IssueTable::class)->getMonthlyINO($tmp_DCNo);
+			$results = $this->getDefinedTable(Store\IssueTable::class)->getMonthlyINO($tmp_INo);
 			$dc_no_list = array();
+			$prefix_length = strlen($tmp_INo);
 			foreach($results as $result):
-				array_push($dc_no_list, substr($result['challan_no'], 8));
+				$serial_part = substr($result['challan_no'], $prefix_length);
+				if($serial_part !== '' && ctype_digit((string)$serial_part)):
+					array_push($dc_no_list, (int)$serial_part);
+				endif;
 			endforeach;
-			$next_serial = max($dc_no_list) + 1;
+			$next_serial = (sizeof($dc_no_list) > 0) ? (max($dc_no_list) + 1) : 1;
 				
 			switch(strlen($next_serial)){
 				case 1: $next_dc_serial = "000".$next_serial; break;
@@ -159,18 +249,36 @@ class IssueController extends AbstractActionController
 				default: $next_dc_serial = $next_serial;       break;
 			}	
 			$challan_no = $tmp_INo.$next_dc_serial;
-			$transporter = ($form['fcb_transport'] == 1)?$form['transporter_fcb']:$form['transporter_nonfcb'];
+			$fcb_transport = (isset($form['fcb_transport']) && $form['fcb_transport'] !== '') ? $form['fcb_transport'] : '1';
+			$transporter = '';
+			if(isset($form['transporter_fcb']) || isset($form['transporter_nonfcb'])):
+				$transporter = ($fcb_transport == 1)
+					? (isset($form['transporter_fcb']) ? $form['transporter_fcb'] : '')
+					: (isset($form['transporter_nonfcb']) ? $form['transporter_nonfcb'] : '');
+			endif;
+			$issued_to = isset($form['issued_to']) ? (int)$form['issued_to'] : (isset($form['received_by']) ? (int)$form['received_by'] : 0);
+			if($issued_to <= 0):
+				$this->flashMessenger()->addMessage("error^ Please select Issue To Employee.");
+				return $this->redirect()->toRoute('inissue',array('action'=>'addissue'));
+			endif;
+			$to_location = isset($form['to_location']) ? (int)$form['to_location'] : 0;
+			if($to_location <= 0 && $issued_to > 0):
+				$to_location = (int)$this->getDefinedTable(Hr\EmployeeTable::class)->getColumn($issued_to, 'location');
+			endif;
 			$data =array(
 					'issue_date'    => $form['issue_date'],
 					'challan_no'    => $challan_no,
 					'from_location' => $form['from_location'],
-					'to_location'   => $form['to_location'],
+					'to_location'   => $to_location,
+					'received_by'   => $issued_to,
+					'sub_head'      => isset($form['sub_head']) ? $form['sub_head'] : NULL,
 					'cost_center'   => $form['activity'],
 					'item_group'    => $form['item_group'],
-					'fcb_transport' => $form['fcb_transport'],
+					'department'    => isset($form['department']) ? $form['department'] : NULL,
+					'fcb_transport' => $fcb_transport,
 					'transporter' => $transporter,
-					'vehicle_no' => $form['vehicle_no'],
-					'party' => $form['party'],
+					'vehicle_no' => isset($form['vehicle_no']) ? $form['vehicle_no'] : NULL,
+					'party' => isset($form['party']) ? $form['party'] : NULL,
 					'total_amount' => $form['payable_amount'],
 					'note' => $form['note'],
 					'status' => 1,
@@ -184,7 +292,7 @@ class IssueController extends AbstractActionController
 			
 			if($result>0):
 				$item= $form['item'];
-				$assetssp= $form['assetssp'];
+				$assetssp = isset($form['assetssp']) ? $form['assetssp'] : array();
 				$from_balance = $form['from_balance'];
 				$rate= $form['rate'];
 				$quantity= $form['quantity'];
@@ -196,7 +304,7 @@ class IssueController extends AbstractActionController
 						$issue_detail_data = array(
 							'issue' => $result,
 							'item' => $item[$i],
-							'assetssp' => $assetssp[$i],
+							'assetssp' => (isset($assetssp[$i]) && $assetssp[$i] !== '') ? $assetssp[$i] : 0,
 							'uom' => $uom[$i],
 							'quantity' => $quantity[$i],
 							'rate' => $rate[$i],
@@ -225,15 +333,62 @@ class IssueController extends AbstractActionController
 				'user_location' => $this->_userloc,
 				'regionObj'     => $this->getDefinedTable(Administration\RegionTable::class),
 				'locationObj' 	=> $this->getDefinedTable(Administration\LocationTable::class),
+				'departments'   => $this->getDefinedTable(Administration\DepartmentTable::class)->getAll(),
 				'admin_locs' 	=> $this->getDefinedTable(Administration\LocationTable::class)->get(array('l.id'=>$admin_loc_array)),
 				'activities'  	=> $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
 				'itemgroupObj'  	=> $this->getDefinedTable(Store\GroupTable::class),
 				'parties'   	=> $this->getDefinedTable(Accounts\PartyTable::class)->get(array('p.role'=>4)),
 				'employee_driver' => $this->getDefinedTable(Hr\EmployeeTable::class)->getEmployee(array('e.position_title'=>array(26,30,34,38,39,25))),
+				'subheads'   	=> $this->getDefinedTable(Accounts\SubheadTable::class)->getAll(),
 				'user_location' => $this->_userloc,
 				'userRoleObj'  => $this->getDefinedTable(Acl\UserroleTable::class),
 				'userID' => $this->_author,
 		));
+	}
+
+	public function getissuedtoemployeeAction()
+	{
+		$this->init();
+		$form = $this->getRequest()->getPost();
+		$department = isset($form['department']) ? (int)$form['department'] : 0;
+		$employees = ($department > 0)
+			? $this->getDefinedTable(Hr\EmployeeTable::class)->get(array('e.department' => $department, 'e.status' => 1))
+			: array();
+
+		$options = "<option value=''></option>";
+		foreach($employees as $employee):
+			$employee_id = isset($employee['id']) ? (int)$employee['id'] : 0;
+			if($employee_id <= 0):
+				continue;
+			endif;
+			$employee_location = isset($employee['location_id']) ? $employee['location_id'] : (isset($employee['location']) ? $employee['location'] : '');
+			$employee_name = isset($employee['full_name']) ? $employee['full_name'] : $employee_id;
+			$employee_designation = isset($employee['designation']) ? $employee['designation'] : (isset($employee['position_title']) ? $employee['position_title'] : '');
+			$designation_text = ($employee_designation !== '') ? " (".$employee_designation.")" : '';
+			$options .= "<option value='".$employee_id."' data-location='".$employee_location."'>".$employee_name.$designation_text."</option>";
+		endforeach;
+
+		echo json_encode(array(
+			'employees' => $options,
+		));
+		exit;
+	}
+
+	public function getissuedepartmentAction()
+	{
+		$this->init();
+		$departments = $this->getDefinedTable(Administration\DepartmentTable::class)->getAll();
+		$options = "<option value=''></option>";
+		foreach($departments as $department):
+			if(isset($department['status']) && (int)$department['status'] !== 1):
+				continue;
+			endif;
+			$options .= "<option value='".$department['id']."'>".$department['department']."</option>";
+		endforeach;
+		echo json_encode(array(
+			'departments' => $options,
+		));
+		exit;
 	}
 	
 	/**
@@ -244,27 +399,24 @@ class IssueController extends AbstractActionController
 		$this->init();
 		$form = $this->getRequest()->getPost();
 		
-		$source_loc = $form['source_loc'];
-		$item_group_id = $form['item_group'];
+		$item_group_id = isset($form['item_group']) ? (int)$form['item_group'] : 0;
 		
+		$items = '';
 		$items .="<option value=''></option>";
-		if($item_group_id == 1):
-			$assetitems = $this->getDefinedTable(Store\AssetTable::class)->getIssueItems(array('a.status'=>'3','ad.location'=>$source_loc,'i.item_group'=>$item_group_id));
-		    foreach($assetitems as $assetitem):
-			    $items .="<option value='".$assetitem['item_id']."'>".$assetitem['name']."</option>";
-		    endforeach;
-			echo json_encode(array(
-			'items' => $items,
-		));
-		else:	
-			$sspitems = $this->getDefinedTable(Store\StoreSpareTable::class)->getIssueItems(array('ssp.status'=>'3','sspd.location'=>$source_loc,'i.item_group'=>$item_group_id));
-		    foreach($sspitems as $sspitem):
-				$items .="<option value='".$sspitem['item_id']."'>".$sspitem['name']."</option>";
-			endforeach;
-		    echo json_encode(array(
-			'items' => $items,
-		));
+		$conditions = array();
+		if($item_group_id > 0):
+			$conditions['i.item_group'] = $item_group_id;
 		endif;
+		$stockItems = (sizeof($conditions) > 0)
+			? $this->getDefinedTable(Stock\ItemTable::class)->get($conditions)
+			: $this->getDefinedTable(Stock\ItemTable::class)->getAll();
+		foreach($stockItems as $stockItem):
+			$label = isset($stockItem['name']) ? $stockItem['name'] : (isset($stockItem['code']) ? $stockItem['code'] : $stockItem['id']);
+			$items .="<option value='".$stockItem['id']."'>".$label."</option>";
+		endforeach;
+		echo json_encode(array(
+			'items' => $items,
+		));
 		exit;
 	}
 	
@@ -274,41 +426,9 @@ class IssueController extends AbstractActionController
 	public function getdetailsAction()
 	{
 		$this->init();		
-		$form = $this->getRequest()->getpost();		
-		$item_id = $form['item_id'];
-		$source_loc = $form['source_loc'];
-		
-		$selected_items = $this->getDefinedTable(Store\ItemTable::class)->get($item_id);
-		foreach($selected_items as $item);	
-			
-		$item_group = $item['item_group_id'];
-		if($item_group == 1): //Assets 
-		
-		    $assetObj = $this->getDefinedTable(Store\AssetTable::class);		
-		    $assets = $assetObj->getAsset(array('a.item'=>$item_id,'ad.location'=>$source_loc));
-			$select_assets .="<option value=''></option>";
-			$uom .="<option value=''></option>";
-			foreach($assets as $asset):
-				$select_assets .="<option value='".$asset['id']."'>".$asset['asset']."</option>";
-			endforeach;
-			echo json_encode(array(
-				'assetssp' => $select_assets,
-			));
-			
-		else:// Store and Spare
-		    
-			$sspObj = $this->getDefinedTable(Store\StoreSpareTable::class);		
-		    $storespares = $sspObj->getStoreSpare(array('ssp.item'=>$item_id,'sspd.location'=>$source_loc));
-			$select_storespares .="<option value=''></option>";
-			$uom .="<option value=''></option>";
-			foreach($storespares as $storespare):
-				$select_storespares .="<option value='".$storespare['id']."'>".$storespare['storespare']."</option>";
-			endforeach;
-			echo json_encode(array(
-				'assetssp' => $select_storespares,
-			));
-		
-		endif;
+		echo json_encode(array(
+			'assetssp' => "<option value=''></option>",
+		));
 		exit;
 	}
 	
@@ -320,38 +440,61 @@ class IssueController extends AbstractActionController
 		$this->init();
 		$form = $this->getRequest()->getPost();
 		
-		$assetssp_id = $form['assetssp_id'];
 		$source_loc = $form['source_loc'];
 		$destination_loc = $form['destination_loc'];
 		$item_id = $form['item_id'];
 		
-		$selected_item = $this->getDefinedTable(Store\ItemTable::class)->get($item_id);
-		foreach($selected_item as $item);
-		
-		$item_uoms = $this->getDefinedTable(Stock\UomTable::class)->get($item['st_uom_id']);	
-        $uom .="<option value=''></option>";		
+		$itemData = $this->getDefinedTable(Stock\ItemTable::class)->get($item_id);
+		$item = array();
+		foreach($itemData as $itemRow):
+			$item = $itemRow;
+		endforeach;
+		$item_source = (sizeof($itemData) > 0) ? 'stock' : '';
+		$st_uom_id = isset($item['st_uom_id']) ? (int)$item['st_uom_id'] : (isset($item['uom']) ? (int)$item['uom'] : 0);
+		$item_uoms = ($st_uom_id > 0) ? $this->getDefinedTable(Stock\UomTable::class)->get($st_uom_id) : array();
+		$selected_uom = '';
+        
         foreach($item_uoms as $item_uom):
 			$selected_uom .="<option value='".$item_uom['id']."'>".$item_uom['code']."</option>";
 		endforeach;
 		
-		$item_group = $item['item_group_id'];
-		
-		if($item_group == 1)://Assets
-		
-			$assetdltObj = $this->getDefinedTable(Store\AssetDetailsTable::class);
-			$uomObj = $this->getDefinedTable(Stock\UomTable::class);
-			$source_qty = $assetdltObj->getColumn(array('asset'=>$assetssp_id,'location'=>$source_loc),'quantity');
-			$destination_qty = $assetdltObj->getColumn(array('asset'=>$assetssp_id,'location'=>$destination_loc),'quantity');
-			$rate = $assetdltObj->getColumn(array('asset'=>$assetssp_id,'location'=>$source_loc),'rate');
-		
-		else: //Store and Spare
-		
-			$sspdltObj = $this->getDefinedTable(Store\StoreSpareDetailsTable::class);
-			$source_qty = $sspdltObj->getColumn(array('storespare'=>$assetssp_id,'location'=>$source_loc),'quantity');
-			$destination_qty = $sspdltObj->getColumn(array('storespare'=>$assetssp_id,'location'=>$destination_loc),'quantity');
-			$rate = $sspdltObj->getColumn(array('storespare'=>$assetssp_id,'location'=>$source_loc),'rate');
-
-	    endif;
+		if($item_source === 'stock'):
+			$item_valuation = isset($item['valuation']) ? (int)$item['valuation'] : 1;
+			if($item_valuation == 1):
+				$movingitemObj = $this->getDefinedTable(Stock\MovingItemTable::class);
+				$source_qty = $movingitemObj->getColumn(array('item'=>$item_id,'location'=>$source_loc),'quantity');
+				$destination_qty = $movingitemObj->getColumn(array('item'=>$item_id,'location'=>$destination_loc),'quantity');
+				$rate = $movingitemObj->getColumn(array('item'=>$item_id,'location'=>$source_loc),'selling_price');
+			else:
+				$batchObj = $this->getDefinedTable(Stock\BatchTable::class);
+				$batchdltObj = $this->getDefinedTable(Stock\BatchDetailsTable::class);
+				$batch_id = $batchObj->getMax('id', array('item' => $item_id));
+				if($batch_id > 0):
+					$source_qty = $batchdltObj->getColumn(array('batch'=>$batch_id,'location'=>$source_loc),'quantity');
+					$destination_qty = $batchdltObj->getColumn(array('batch'=>$batch_id,'location'=>$destination_loc),'quantity');
+					$rate = $batchdltObj->getColumn(array('batch'=>$batch_id,'location'=>$source_loc),'selling_price');
+				else:
+					$source_qty = 0;
+					$destination_qty = 0;
+					$rate = 0;
+				endif;
+			endif;
+			if(!is_numeric($source_qty) || (float)$source_qty <= 0):
+				$sourceOpening = $this->getOpeningStockSummary($item_id, $source_loc);
+				$source_qty = isset($sourceOpening['quantity']) ? $sourceOpening['quantity'] : $source_qty;
+				if(!is_numeric($rate) || (float)$rate <= 0):
+					$rate = isset($sourceOpening['rate']) ? $sourceOpening['rate'] : $rate;
+				endif;
+			endif;
+			if(!is_numeric($destination_qty) || (float)$destination_qty <= 0):
+				$destinationOpening = $this->getOpeningStockSummary($item_id, $destination_loc);
+				$destination_qty = isset($destinationOpening['quantity']) ? $destinationOpening['quantity'] : $destination_qty;
+			endif;
+		else:
+			$source_qty = 0;
+			$destination_qty = 0;
+			$rate = 0;
+		endif;
 		
 		$source_qty = (is_numeric($source_qty))?$source_qty:"0.00";
 		$destination_qty = (is_numeric($destination_qty))?$destination_qty:"0.00";
@@ -373,14 +516,14 @@ class IssueController extends AbstractActionController
 		$this->init();		
 		$params = explode("-", (string) $this->_id);
 		//echo "<pre>"; print_r($params); exit;
-		if($params['1'] == '1' && $params['2'] > 0){
+		if(isset($params[1], $params[2]) && $params[1] == '1' && $params[2] > 0){
 			$flag = $this->getDefinedTable(Acl\NotifyTable::class)->getColumn($params['2'], 'flag'); 
 			if($flag == "0") {
 				$notify = array('id' => $params['2'], 'flag'=>'1');
                	$this->getDefinedTable(Acl\NotifyTable::class)->save($notify); 	
 			}				
 		}		
-		$issue_ID = $params['0'];
+		$issue_ID = isset($params[0]) ? $params[0] : 0;
         //echo "<pre>"; print_r($issue_ID); exit;		
 		return new ViewModel(array(
 				'title' => 'View Goods Dispatch',
@@ -420,6 +563,7 @@ class IssueController extends AbstractActionController
 					'issue_date' => $form['issue_date'],
 					'from_location' => $form['from_location'],
 					'to_location' => $form['to_location'],
+					'sub_head' => isset($form['sub_head']) ? $form['sub_head'] : NULL,
 					'cost_center' => $form['activity'],
 					'item_group' => $form['item_group'],
 					'fcb_transport' => $form['fcb_transport'],
@@ -505,6 +649,7 @@ class IssueController extends AbstractActionController
 				'user_location' => $this->_userloc,
 				'groupObj'  => $this->getDefinedTable(Store\GroupTable::class),
 				'uomObj' => $this->getDefinedTable(Stock\UomTable::class),
+				'subheads' => $this->getDefinedTable(Accounts\SubheadTable::class)->getAll(),
 		));
 	}
 	
@@ -710,6 +855,14 @@ class IssueController extends AbstractActionController
 		$center_location = $this->getDefinedTable(Store\IssueTable::class)->getColumn($this->_id,"from_location");
 		$issues = $this->getDefinedTable(Store\IssueTable::class)->get($this->_id);
 		foreach($issues as $issue):
+		$issue_sub_head = isset($issue['sub_head']) ? (int)$issue['sub_head'] : 0;
+		$issue_head = 16;
+		if($issue_sub_head > 0):
+			$selected_sub_heads = $this->getDefinedTable(Accounts\SubheadTable::class)->get($issue_sub_head);
+			foreach($selected_sub_heads as $selected_sub_head):
+				$issue_head = isset($selected_sub_head['head_id']) ? (int)$selected_sub_head['head_id'] : $issue_head;
+			endforeach;
+		endif;
 		
 		$voucher_amount = $issue['total_amount'];
 		$issue_no = $issue['challan_no'];
@@ -761,8 +914,8 @@ class IssueController extends AbstractActionController
 					'transaction'  => $result,
 					'location'     => $issue['from_location'],
 					'activity'     => '5',
-					'head'         => '16',
-					'sub_head'     => '1237',
+					'head'         => $issue_head,
+					'sub_head'     => ($issue_sub_head > 0) ? $issue_sub_head : '1237',
 					'bank_ref_type'=> $bank_ref_type,
 					'cheque_no'    => '',
 					'debit'        => 0.00,
@@ -1329,6 +1482,11 @@ class IssueController extends AbstractActionController
 	public function issuereportAction()
 	{
 		$this->init();
+		$admin_locs = $this->getDefinedTable(Acl\UsersTable::class)->getColumn($this->_author,'admin_location');
+		$admin_loc_array = array_filter(array_map('trim', explode(',', (string)$admin_locs)));
+		if(sizeof($admin_loc_array) == 0 && (int)$this->_userloc > 0):
+			$admin_loc_array = array((int)$this->_userloc);
+		endif;
 		
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getPost();
@@ -1340,12 +1498,13 @@ class IssueController extends AbstractActionController
 				'end_date'             => $form['end_date'],
 			);
 		}else{
+			$today = date('Y-m-d');
 			$data = array(
 				'item_group'           => '-1',
 				'source_location'      => '-1',
 				'destination_location' => '-1',
-				'start_date'           => '',
-				'end_date'             => '',
+				'start_date'           => $today,
+				'end_date'             => $today,
 			);
 		}
 		
@@ -1357,10 +1516,14 @@ class IssueController extends AbstractActionController
 			'data'        => $data,
 			'issueObj'    => $this->getDefinedTable(Store\IssueTable::class),
 			'itemObj'     => $this->getDefinedTable(Store\ItemTable::class),
+			'stockItemObj'=> $this->getDefinedTable(Stock\ItemTable::class),
 			'uomObj'      => $this->getDefinedTable(Stock\UomTable::class),
 			'groupObj'    => $this->getDefinedTable(Store\GroupTable::class),
 			'assetObj'    => $this->getDefinedTable(Store\AssetTable::class),
 			'assetsspObj' => $this->getDefinedTable(Store\StoreSpareTable::class),
+			'employeeObj' => $this->getDefinedTable(Hr\EmployeeTable::class),
+			'admin_locs'  => $this->getDefinedTable(Administration\LocationTable::class)->get(array('l.id' => $admin_loc_array)),
+			'admin_loc_ids' => $admin_loc_array,
 		));
 	}
 	/**

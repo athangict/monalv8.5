@@ -1233,7 +1233,7 @@ class LeaveController extends AbstractActionController
 					$encashSubHead = $this->getDefinedTable(Hr\PayheadtypeTable::class)->getLeaveEncashmentSubheadId();
 					if($encashSubHead < 1):
 						$this->_connection->rollback();
-						$this->flashMessenger()->addMessage("error^ Configure one payroll Leave Encashment payhead type with code LE and a valid Finance provision subhead mapping.");
+						$this->flashMessenger()->addMessage("error^ Configure one payroll Leave Encashment payhead type with code LE or a name containing Leave Encashment, and a valid Finance provision subhead mapping.");
 						return $this->redirect()->toRoute('leave', array('action'=>'encashmentdtl', 'id' => $leave_id));
 					endif;
 					$encashHead = (int)$this->getDefinedTable(Accounts\SubheadTable::class)->getColumn($encashSubHead,'head');
@@ -1243,20 +1243,28 @@ class LeaveController extends AbstractActionController
 						return $this->redirect()->toRoute('leave', array('action'=>'encashmentdtl', 'id' => $leave_id));
 					endif;
 					$deductionAmount = (float) str_replace(',', '', (string) $deduction);
-					$deductionSubHead = (int)$this->getDefinedTable(Hr\LeaveEncashTable::class)->getColumn(array('id'=>$leave_id),'deduction_sub_head');
-					if($deductionAmount > 0 && $deductionSubHead < 1):
+					$deductionSubHead = 0;
+					if($deductionAmount > 0):
 						$taxPayhead = null;
 						foreach($this->getDefinedTable(Hr\PaystructureTable::class)->get(array('sd.employee' => $leaveEmployee, 'pht.deduction' => 1, 'ph.against' => '-2')) as $deductionHeadRow):
-							if(in_array((int)$deductionHeadRow['type'], array(2,3), true)):
+							if(in_array((int)$deductionHeadRow['type'], array(2,3), true)
+								&& isset($deductionHeadRow['head_type'])
+								&& Hr\PayheadtypeTable::isSalaryTaxOrTdsName($deductionHeadRow['head_type'])):
 								$taxPayhead = $deductionHeadRow;
 								break;
 							endif;
 						endforeach;
 						if($taxPayhead !== null):
 							$payheadTypeId = $this->getDefinedTable(Hr\PayheadTable::class)->getColumn($taxPayhead['pay_head_id'], 'payhead_type');
-							$mappedSubHead = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('ref_id' => $payheadTypeId, 'type' => 5), 'id');
+							$mappedSubHead = $this->getDefinedTable(Hr\PayheadtypeTable::class)->getFinanceSubheadId($payheadTypeId);
 							if(is_scalar($mappedSubHead) && ctype_digit((string) $mappedSubHead) && (int)$mappedSubHead > 0):
-								$deductionSubHead = (int)$mappedSubHead;
+								$mappedSubHeads = $this->getDefinedTable(Accounts\SubheadTable::class)->get(array(
+									'sh.id' => (int) $mappedSubHead,
+									'sh.type' => 5,
+								));
+								if(count($mappedSubHeads) === 1):
+									$deductionSubHead = (int)$mappedSubHeads[0]['id'];
+								endif;
 							endif;
 						endif;
 					endif;
@@ -1264,7 +1272,7 @@ class LeaveController extends AbstractActionController
 					if($deductionAmount > 0):
 						if($deductionSubHead < 1):
 							$this->_connection->rollback();
-							$this->flashMessenger()->addMessage("error^ Missing finance subhead mapping for TDS deduction pay head. Please configure pay head mapping.");
+							$this->flashMessenger()->addMessage("error^ Configure the employee's deduction PayHead Type with a name containing Salary Tax or TDS and a valid Finance Sub Head mapping.");
 							return $this->redirect()->toRoute('leave', array('action'=>'encashmentdtl', 'id' => $leave_id));
 						endif;
 						$deductionHead = (int)$this->getDefinedTable(Accounts\SubheadTable::class)->getColumn($deductionSubHead,'head');
@@ -1637,7 +1645,9 @@ class LeaveController extends AbstractActionController
 		$PIT_deduct = 0;
 		$taxPayhead = null;
 		foreach($this->getDefinedTable(Hr\PaystructureTable::class)->get(array('sd.employee' => $employeeID, 'pht.deduction' => 1, 'ph.against' => '-2')) as $deductionHead):
-			if(in_array((int)$deductionHead['type'], array(2,3), true)):
+			if(in_array((int)$deductionHead['type'], array(2,3), true)
+				&& isset($deductionHead['head_type'])
+				&& Hr\PayheadtypeTable::isSalaryTaxOrTdsName($deductionHead['head_type'])):
 				$taxPayhead = $deductionHead;
 				break;
 			endif;
@@ -1705,16 +1715,24 @@ class LeaveController extends AbstractActionController
 			$deductionSubHead = null;
 			$taxPayhead = null;
 			foreach($this->getDefinedTable(Hr\PaystructureTable::class)->get(array('sd.employee' => $form['applicant'], 'pht.deduction' => 1, 'ph.against' => '-2')) as $deductionHead):
-				if(in_array((int)$deductionHead['type'], array(2,3), true)):
+				if(in_array((int)$deductionHead['type'], array(2,3), true)
+					&& isset($deductionHead['head_type'])
+					&& Hr\PayheadtypeTable::isSalaryTaxOrTdsName($deductionHead['head_type'])):
 					$taxPayhead = $deductionHead;
 					break;
 				endif;
 			endforeach;
 			if($taxPayhead !== null):
 				$payheadTypeId = $this->getDefinedTable(Hr\PayheadTable::class)->getColumn($taxPayhead['pay_head_id'], 'payhead_type');
-				$mappedSubHead = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('ref_id' => $payheadTypeId, 'type' => 5), 'id');
+				$mappedSubHead = $this->getDefinedTable(Hr\PayheadtypeTable::class)->getFinanceSubheadId($payheadTypeId);
 				if(is_scalar($mappedSubHead) && ctype_digit((string) $mappedSubHead) && (int)$mappedSubHead > 0):
-					$deductionSubHead = (int)$mappedSubHead;
+					$mappedSubHeads = $this->getDefinedTable(Accounts\SubheadTable::class)->get(array(
+						'sh.id' => (int) $mappedSubHead,
+						'sh.type' => 5,
+					));
+					if(count($mappedSubHeads) === 1):
+						$deductionSubHead = (int)$mappedSubHeads[0]['id'];
+					endif;
 				endif;
 			endif;
 		    $encashedDate = $this->getDefinedTable(Hr\LeaveEncashTable::class)->getMax($column='encash_date', $where=array('employee'=>$form['applicant'],'status'=>array(2,8)));

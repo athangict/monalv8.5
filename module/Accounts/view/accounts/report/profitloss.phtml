@@ -120,7 +120,7 @@
 						<div class="form-group col-lg-2">
 							<label for="region" class="control-label">Region</label>
 							<select class="form-control" name="region" id="region" data-paceholder="Select">
-								<option value="-1">All</option>
+								<?php if(!empty($allowAllRegion)): ?><option value="-1">All</option><?php endif; ?>
 								<?php foreach ($region as $reg):?>
 								<?php $selected_reg = ($data["region"]==$reg['id'])? 'selected':'';?>
 									<option value="<?php echo $reg['id'];?>" <?php echo $selected_reg;?>>
@@ -132,12 +132,12 @@
 						<div class="form-group col-lg-2">
 							<label for="location" class="contol-label">Location</label>
 							<select class="form-control" name="location" id="location" data-placeholder="Select" >
-								<option value="-1">All</option>
+								<?php if(!empty($allowAllLocation)): ?><option value="-1">All</option><?php endif; ?>
 								<?php if($data["region"]>0):
-									foreach($this->locationObj->get(array('region'=> $data["region"])) as $locations):
+									foreach($locations as $locationRow):
 								?>
-									<?php $selected_loc = ($data["location"]==$locations['id'])? 'selected':'';?>
-									<option value="<?php echo $locations['id'];?>" <?php echo $selected_loc;?> ><?php echo $locations['location'];?></option>
+									<?php $selected_loc = ($data["location"]==$locationRow['id'])? 'selected':'';?>
+									<option value="<?php echo $locationRow['id'];?>" <?php echo $selected_loc;?> ><?php echo $locationRow['location'];?></option>
 								<?php endforeach;
 								endif;?>							
 							</select>
@@ -147,12 +147,14 @@
 							<div>
 								<?php if(isset($canForceReclose, $hasExistingCloseSnapshot) && $canForceReclose && $hasExistingCloseSnapshot): ?>
 								<label class="force-reclose-inline">
-									<input type="checkbox" id="force_reclose_chk" value="1"> Force Re-close (Admin)
+									<input type="checkbox" id="force_reclose_chk" value="1"> Force Re-close (Authorized)
 								</label>
 								<?php endif; ?>
 								<div class="report-action-buttons">
 									<button type="submit" class="btn btn-sm btn-success"><i class="fa fa-gear"></i> Generate </button>
+									<?php if(!empty($canRunMonthlyClose)): ?>
 									<button type="button" id="run-monthly-close-btn" class="btn btn-sm btn-primary"><i class="fa fa-refresh"></i> Run Monthly Close Snapshot</button>
+									<?php endif; ?>
 								</div>
 							</div>
 						</div>
@@ -446,6 +448,7 @@
 </div>
 <script type="text/javascript">
 $(function(){
+	var allowAllLocation = <?php echo !empty($allowAllLocation) ? 'true' : 'false'; ?>;
 	$('#start_date').datepicker();
 	$('#end_date').datepicker();
 	$('#start_date').on('changeDate',function(){
@@ -468,6 +471,14 @@ $(function(){
 		}
 	});
 	$('#run-monthly-close-btn').on('click', function(){
+		if($('#force_reclose_chk').length && $('#force_reclose_chk').is(':checked')){
+			var closeNote = $.trim($('#mc_close_note').val() || '');
+			if(closeNote === ''){
+				window.alert('Force re-close requires a reason note.');
+				$('#mc_close_note').focus();
+				return;
+			}
+		}
 		if(confirm('Run monthly close snapshot for selected period and scope?')){
 			$('#monthly-close-form').trigger('submit');
 		}
@@ -482,7 +493,7 @@ $(function(){
 	});
         $("#region").change(function() { 
 			$.post( "<?php echo $this->url('ajresponse', array('action' => 'getlocation')); ?>/"+ $("#region").val(), function( data ) {
-				var newdata ="<option value='-1'>All</option>"+data
+				var newdata = (allowAllLocation ? "<option value='-1'>All</option>" : "") + data;
 				$('#location').html( newdata );
 				$("#location").trigger('chosen:updated');
 			});
@@ -574,7 +585,7 @@ $(function(){
 		$toggle.attr('aria-busy', 'true');
 
 		$.post(
-			"<?php echo $this->url('report', array('action' => 'fetchreportlevel'));?>",
+			"<?php echo $this->url('report', array('action' => 'getreportlevel'));?>",
 			{
 				report: 'profitloss',
 				level: nextLevel,
@@ -592,15 +603,29 @@ $(function(){
 					$row.after(response.rows);
 					$('tr.tb-row[data-parent="' + nodeId + '"]').show();
 					setCaret($toggle, 'expanded');
+				} else if (response && response.message) {
+					setCaret($toggle, 'collapsed');
+					window.alert(response.message);
 				} else {
 					setCaret($toggle, 'collapsed');
 				}
 			},
 			'json'
-		).fail(function() {
+		).fail(function(jqXHR) {
 			setCaret($toggle, 'collapsed');
 			console.error('Failed to load profit/loss children for node:', nodeId);
-			window.alert('Unable to load the selected level right now. Please try again.');
+			var errorMessage = 'Unable to load the selected level right now. Please try again.';
+			if (jqXHR && jqXHR.responseJSON && jqXHR.responseJSON.message) {
+				errorMessage = jqXHR.responseJSON.message;
+			} else if (jqXHR && jqXHR.responseText) {
+				try {
+					var response = JSON.parse(jqXHR.responseText);
+					if (response && response.message) {
+						errorMessage = response.message;
+					}
+				} catch (e) {}
+			}
+			window.alert(errorMessage);
 		}).always(function() {
 			$row.attr('data-loading', '0');
 			$toggle.removeAttr('aria-busy');

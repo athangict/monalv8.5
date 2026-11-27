@@ -178,7 +178,7 @@ class EstatereportController extends AbstractActionController
 		$array_id = explode("_", (string) $this->_id);
 		$region = (sizeof($array_id)>1)?$array_id[0]:'-1';
 		$location = (sizeof($array_id)>1)?$array_id[1]:'-1';
-		$block = (sizeof($array_id)>1)?$array_id[1]:'-1';
+		$block = (sizeof($array_id)>2)?$array_id[2]:'-1';
 	
 		if($this->getRequest()->isPost())
 		{
@@ -222,11 +222,11 @@ class EstatereportController extends AbstractActionController
 		$this->init();
 			$id = $this->_id;
 			$array_id = explode("_", (string) $id);
-			$region = (sizeof($array_id)>1)?$array_id[1]:'-1';
+			$region = (sizeof($array_id)>0 && $array_id[0] !== '')?$array_id[0]:'-1';
 			$location = (sizeof($array_id)>1)?$array_id[1]:'-1';
-			$block = (sizeof($array_id)>1)?$array_id[1]:'-1';
-			$status = (sizeof($array_id)>1)?$array_id[1]:'-1';
-			$building = $array_id[0];
+			$block = (sizeof($array_id)>2)?$array_id[2]:'-1';
+			$building = (sizeof($array_id)>3)?$array_id[3]:'-1';
+			$status = (sizeof($array_id)>4)?$array_id[4]:'-1';
 			
 			if($this->getRequest()->isPost())
 			{
@@ -255,11 +255,14 @@ class EstatereportController extends AbstractActionController
 			);
 			//echo '<pre>';print_r($data);exit;
 			$flat = $this->getDefinedTable(Realestate\FlatTable::class)->getReportflat($data);
+			$buildingFilter = ($block != '-1') ? array('block' => $block) : array();
         return new ViewModel(array(
 			'title'           => 'Flat Report',
 			'data'            => $data,
 			'blockObj'        => $this->getDefinedTable(Asset\AssettypeTable::class),
 			'buildingnasterObj' => $this->getDefinedTable(Realestate\BuildingMasterTable::class),
+			'assetObj'        => $this->getDefinedTable(Asset\AssetmanagementTable::class),
+			'buildingList'    => $this->getDefinedTable(Realestate\BuildingTable::class)->get($buildingFilter),
 			'statusObj' => $this->getDefinedTable(Realestate\FlatstatusTable::class),
 			'floorObj' => $this->getDefinedTable(Realestate\FloorMasterTable::class),
 			'buildingObj' => $this->getDefinedTable(Realestate\BuildingTable::class),

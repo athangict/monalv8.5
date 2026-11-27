@@ -48,9 +48,7 @@ $this->headTitle($this->title);
 						<td><?php echo $row['to_date'];?></td>
 						<td><?php echo $row['payable_amount'];?></td>
 						<td>
-							<a data-toggle="modal" data-target = "#modal" class="btn btn-xs btn-danger" href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "1-".$row['id'])); ?>" title="View Activity Logs">
-								<i class="ace-icon fa fa-plus bigger-120" ></i>  
-							</a>
+							<?php echo $this->button(6, "1-".$row['id'], 0, 3);?>
 						</td>	
 					</tr>							
 					<?php endforeach;?>

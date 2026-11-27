@@ -1,0 +1,69 @@
+<div class="modal-header">
+	<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+		<span aria-hidden="true">&times;</span>
+	</button>
+	<h4 class="modal-title">
+		Outward Dispatch Details
+	</h4>
+</div>
+<div class="modal-body">
+	<p>
+		<strong>Location:</strong> <?php echo $this->locationObj->getColumn($location, 'location'); ?> |
+		<strong>Item:</strong> <?php echo $this->itemObj->getColumn($item, 'name'); ?> |
+		<strong>From:</strong> <?php echo $start_date; ?> |
+		<strong>To:</strong> <?php echo $end_date; ?>
+	</p>
+	<div style="overflow:auto;">
+		<table class="table table-bordered table-condensed table-striped">
+			<thead>
+				<tr>
+					<th>#</th>
+					<th>Type</th>
+					<th>Date</th>
+					<th>Challan No.</th>
+					<th>To Location</th>
+					<th>Dispatched Qty</th>
+					<th>Accepted Qty</th>
+					<th>Status</th>
+				</tr>
+			</thead>
+			<tbody>
+				<?php if(sizeof($details) > 0): ?>
+					<?php $i = 1; foreach($details as $row): ?>
+						<?php
+							$movementType = isset($row['movement_type']) ? $row['movement_type'] : 'Dispatch';
+							$statusLabel = '';
+							if($movementType === 'Issue'):
+								if((int)$row['status'] === 2):
+									$statusLabel = 'Issued';
+								elseif((int)$row['status'] === 10):
+									$statusLabel = 'Received';
+								elseif((int)$row['status'] === 3):
+									$statusLabel = 'Committed';
+								else:
+									$statusLabel = (string)$row['status'];
+								endif;
+							else:
+								$statusLabel = ((int)$row['status'] === 4) ? 'Received' : 'Pending';
+							endif;
+						?>
+						<tr>
+							<td><?php echo $i++; ?></td>
+							<td><?php echo $movementType; ?></td>
+							<td><?php echo $row['dispatch_date']; ?></td>
+							<td><?php echo $row['challan_no']; ?></td>
+							<td><?php echo (isset($row['to_location']) && (int)$row['to_location'] > 0) ? $this->locationObj->getColumn($row['to_location'], 'location') : '-'; ?></td>
+							<td><?php echo $row['quantity']; ?></td>
+							<td><?php echo $row['accepted_qty']; ?></td>
+							<td><?php echo $statusLabel; ?></td>
+						</tr>
+					<?php endforeach; ?>
+				<?php else: ?>
+					<tr>
+						<td colspan="8" class="text-center">No outward details found for this filter.</td>
+					</tr>
+				<?php endif; ?>
+			</tbody>
+		</table>
+	</div>
+</div>

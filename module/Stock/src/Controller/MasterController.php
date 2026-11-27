@@ -85,6 +85,41 @@ class MasterController extends AbstractActionController
 		$this->_connection = $this->_container->get('Laminas\Db\Adapter\Adapter')->getDriver()->getConnection();
 
 	}
+	private function hasGstRateColumn($column)
+	{
+		$column = trim((string)$column);
+		if($column === ''):
+			return false;
+		endif;
+		$adapter = $this->_container->get('Laminas\Db\Adapter\Adapter');
+		$result = $adapter->query(
+			"SHOW COLUMNS FROM `st_gst_rate` LIKE '".$column."'",
+			$adapter::QUERY_MODE_EXECUTE
+		)->toArray();
+		return (sizeof($result) > 0);
+	}
+	private function getGstRateSubheadColumn()
+	{
+		if($this->hasGstRateColumn('subhead')):
+			return 'subhead';
+		endif;
+		if($this->hasGstRateColumn('gst_subhead')):
+			return 'gst_subhead';
+		endif;
+		return NULL;
+	}
+	private function normalizeGstRateRows($gstrates)
+	{
+		if(!is_array($gstrates)):
+			return $gstrates;
+		endif;
+		foreach($gstrates as $key => $gstrate):
+			if(is_array($gstrate) && !isset($gstrate['subhead']) && isset($gstrate['gst_subhead'])):
+				$gstrates[$key]['subhead'] = $gstrate['gst_subhead'];
+			endif;
+		endforeach;
+		return $gstrates;
+	}
 	
 	public function indexAction()
 	{
@@ -239,6 +274,93 @@ class MasterController extends AbstractActionController
 		}
 		$ViewModel = new ViewModel(array(
 				'uomtypes' => $this->getDefinedTable(Stock\UomTypeTable::class)->get($this->_id),
+		));
+		$ViewModel->setTerminal(True);
+		return $ViewModel;
+	}
+	/**
+	 * gst action
+	 */
+	public function gstAction()
+	{
+		$this->init();
+		$gstrates = $this->normalizeGstRateRows($this->getDefinedTable(Stock\GstRateTable::class)->getAll());
+		return new ViewModel( array(
+				'title' => "GST Rate",
+				'gstrates' => $gstrates,
+				'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
+		) );
+	}
+	/**
+	 * add gst action
+	 */
+	public function addgstAction()
+	{
+		$this->init();
+	
+		if($this->getRequest()->isPost()){
+			$form = $this->getRequest()->getPost();
+			$subheadColumn = $this->getGstRateSubheadColumn();
+			if($subheadColumn === NULL):
+				$this->flashMessenger()->addMessage("error^ Missing st_gst_rate subhead column. Please add either `subhead` or `gst_subhead` in st_gst_rate.");
+				return $this->redirect()->toRoute('stmaster',array('action' => 'gst'));
+			endif;
+			$data = array(
+					'rate' => $form['rate'],
+					$subheadColumn => (isset($form['subhead']) && $form['subhead'] !== '') ? $form['subhead'] : NULL,
+					'author' =>$this->_author,
+					'created' =>$this->_created,
+					'modified' =>$this->_modified,
+			);
+			$data = $this->_safedataObj->rteSafe($data);
+			$result = $this->getDefinedTable(Stock\GstRateTable::class)->save($data);
+	
+			if($result > 0):
+				$this->flashMessenger()->addMessage("success^ New GST rate successfully added");
+			else:
+				$this->flashMessenger()->addMessage("Failed^ Failed to add new GST rate");
+			endif;
+			return $this->redirect()->toRoute('stmaster',array('action' => 'gst'));
+		}
+		$ViewModel = new ViewModel(array(
+				'subheads' => $this->getDefinedTable(Accounts\SubheadTable::class)->getAll(),
+		));
+		$ViewModel->setTerminal(True);
+		return $ViewModel;
+	}
+	/**
+	 * edit gst action
+	 **/
+	public function editgstAction()
+	{
+		$this->init();
+		if($this->getRequest()->isPost())
+		{
+			$subheadColumn = $this->getGstRateSubheadColumn();
+			if($subheadColumn === NULL):
+				$this->flashMessenger()->addMessage("error^ Missing st_gst_rate subhead column. Please add either `subhead` or `gst_subhead` in st_gst_rate.");
+				return $this->redirect()->toRoute('stmaster',array('action' => 'gst'));
+			endif;
+			$form=$this->getRequest();
+			$data=array(
+					'id' => $this->_id,
+					'rate' => $form->getPost('rate'),
+					$subheadColumn => ($form->getPost('subhead') !== null && $form->getPost('subhead') !== '') ? $form->getPost('subhead') : NULL,
+					'modified' =>$this->_modified,
+			);
+			$data = $this->_safedataObj->rteSafe($data);
+			$result = $this->getDefinedTable(Stock\GstRateTable::class)->save($data);
+			if($result > 0):
+				$this->flashMessenger()->addMessage("success^ GST rate successfully updated");
+			else:
+				$this->flashMessenger()->addMessage("Failed^ Failed to edit GST rate");
+			endif;
+			return $this->redirect()->toRoute('stmaster',array('action' => 'gst'));
+		}
+		$gstrates = $this->normalizeGstRateRows($this->getDefinedTable(Stock\GstRateTable::class)->get($this->_id));
+		$ViewModel = new ViewModel(array(
+				'gstrates' => $gstrates,
+				'subheads' => $this->getDefinedTable(Accounts\SubheadTable::class)->getAll(),
 		));
 		$ViewModel->setTerminal(True);
 		return $ViewModel;

@@ -156,6 +156,18 @@ class OpeningStockDtlsTable extends AbstractTableGateway
 	 */
 	public function getSMSUM($where=NULL, $column = NULL)
 	{
+		if(is_string($where) && is_array($column)):
+			$legacyColumn = $where;
+			$where = $column;
+			$column = $legacyColumn;
+		endif;
+		if(!is_string($column) || trim($column) === ''):
+			return 0;
+		endif;
+		$column = trim($column);
+		if(!preg_match('/^[A-Za-z0-9_]+$/', $column)):
+			return 0;
+		endif;
 		$adapter = $this->adapter;
 		$sql = new Sql($adapter);
 		$select = $sql->select();
@@ -170,11 +182,12 @@ class OpeningStockDtlsTable extends AbstractTableGateway
 		//echo $selectString; exit;
 		$results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();
 	
+		$sumValue = 0;
 		foreach ($results as $result):
-			$column =  $result['sum'];
+			$sumValue = isset($result['sum']) ? $result['sum'] : 0;
 		endforeach;
 	
-		return $column;
+		return $sumValue;
 	}
 	/**
 	 * get By Activity ID

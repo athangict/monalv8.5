@@ -6,7 +6,7 @@
  */
 $this->headTitle($this->title);	
 ?>
-<?php echo $this->partial('hr/payroll/partial.phtml', array('active' => 'pepf')); ?><br/>
+<?php echo $this->partial('hr/payroll/partial.phtml', array('active' => 'pepf')); ?>
 <div class="card">
 	<div class="card-header">
 		<div class="row">
@@ -48,7 +48,7 @@ $this->headTitle($this->title);
 						<div class="pull-right tableTools-container">
 						<a href="<?php echo $this->url('payroll', array('action'=>'generatepepf','id'=>$currentYear.'-'.$month));?>"  class="btn btn-primary" onclick="confirmSubmit(this);" >
 						Generate PE PF for the month of <?php echo date('F, Y', strtotime('1-'.$month.'-'.$currentYear));?>
-					</a>
+						</a>
 					</div>
 				</div>
 				<?php endif;?>
@@ -116,5 +116,3 @@ $('document').ready(function(){
 	});
 });
 </script>
-
-

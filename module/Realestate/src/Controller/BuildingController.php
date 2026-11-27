@@ -143,7 +143,7 @@ class BuildingController extends AbstractActionController
             'buildings' 		=> $this->getDefinedTable(Realestate\BuildingTable::class)->getData($data),
             'block' 			=> $this->getDefinedTable(Asset\AssettypeTable::class),
 			'data'				=> $data,
-			'buildingObj' 		=> $this->getDefinedTable(Realestate\BuildingMasterTable::class),
+			'assetObj' 			=> $this->getDefinedTable(Asset\AssetmanagementTable::class),
 			'locationObj' 		=> $this->getDefinedTable(Administration\LocationTable::class),
 			'admin_location'	=> $admin_loc_array,
 
@@ -157,6 +157,18 @@ class BuildingController extends AbstractActionController
 		$admin_loc_array = explode(',',$admin_locs);
         if ($this->getRequest()->isPost()) {
             $form = $this->getRequest()->getPost();
+			$generateRentRaw = $form['generate_rent'] ?? ($form['rent'] ?? 0);
+			if (is_array($generateRentRaw)) {
+				$generateRent = in_array('1', array_map('strval', $generateRentRaw), true) ? 1 : 0;
+			} else {
+				$generateRent = ((string)$generateRentRaw === '1') ? 1 : 0;
+			}
+			$rentHead = (int)($form['rent_head'] ?? 0);
+			$rentSubHead = (int)($form['rent_sub_head'] ?? 0);
+			if ($generateRent !== 1) {
+				$rentHead = 0;
+				$rentSubHead = 0;
+			}
 
             $data = array(
                 'block' 		=> $form['block'],
@@ -166,6 +178,9 @@ class BuildingController extends AbstractActionController
                 'plot_no' 		=> $form['plot_no'],
                 'thram_no'	 	=> $form['thram_no'],
                 'location' 		=> $form['location'],
+				'rent' 			=> $generateRent,
+				'head' 			=> $rentHead,
+				'sub_head' 		=> $rentSubHead,
                 'author' 		=> $this->_author,
                 'created' 		=> $this->_created,
                 'modified' 		=> $this->_modified,
@@ -212,6 +227,7 @@ class BuildingController extends AbstractActionController
             'source_locs' => $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_author,'location'),
             'admin_location' => $admin_loc_array,
             'block' => $this->getDefinedTable(Asset\AssettypeTable::class)->get(array('id'=>[6,7])),
+			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
 			'floor' => $this->getDefinedTable(Realestate\FloorMasterTable::class)->getAll(),
 			'status' => $this->getDefinedTable(Realestate\FlatstatusTable::class)->getAll(),
       
@@ -227,6 +243,18 @@ class BuildingController extends AbstractActionController
 		$admin_loc_array = explode(',',$admin_locs);
         if ($this->getRequest()->isPost()) {
             $form = $this->getRequest()->getPost();
+			$generateRentRaw = $form['generate_rent'] ?? ($form['rent'] ?? 0);
+			if (is_array($generateRentRaw)) {
+				$generateRent = in_array('1', array_map('strval', $generateRentRaw), true) ? 1 : 0;
+			} else {
+				$generateRent = ((string)$generateRentRaw === '1') ? 1 : 0;
+			}
+			$rentHead = (int)($form['rent_head'] ?? 0);
+			$rentSubHead = (int)($form['rent_sub_head'] ?? 0);
+			if ($generateRent !== 1) {
+				$rentHead = 0;
+				$rentSubHead = 0;
+			}
             $data = array(
 				'id'		=>$this->_id,
                 'block' 	=> $form['block'],
@@ -236,6 +264,9 @@ class BuildingController extends AbstractActionController
                 'plot_no' 	=> $form['plot_no'],
                 'thram_no' 	=> $form['thram_no'],
                 'location' 	=> $form['location'],
+				'rent' 			=> $generateRent,
+				'head' 			=> $rentHead,
+				'sub_head' 		=> $rentSubHead,
                 'author' 	=> $this->_author,
                 'created' 	=> $this->_created,
                 'modified' 	=> $this->_modified,
@@ -300,14 +331,34 @@ class BuildingController extends AbstractActionController
             }
            return $this->redirect()->toRoute('building', array('action' =>'viewbuilding', 'id' => $this->_id));
         }
+		$currentBuildings = $this->getDefinedTable(Realestate\BuildingTable::class)->get($this->_id);
+		$currentBuilding = array();
+		foreach($currentBuildings as $row):
+			$currentBuilding = $row;
+			break;
+		endforeach;
+		$assetList = $this->getDefinedTable(Asset\AssetmanagementTable::class)->get(array(
+			'a.asset_type' => (int)($currentBuilding['block'] ?? 0),
+		));
+		if (empty($assetList)):
+			$assetList = $this->getDefinedTable(Asset\AssetmanagementTable::class)->getAll();
+		endif;
+		$rentSubheads = array();
+		$rentHeadValue = (int)($currentBuilding['head'] ?? ($currentBuilding['rent_head'] ?? 0));
+		if ($rentHeadValue > 0):
+			$rentSubheads = $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.head' => $rentHeadValue));
+		endif;
+
         return new ViewModel(array(
             'title' 			=> 'Edit building.',
-            'buildings' 		=> $this->getDefinedTable(Realestate\BuildingTable::class)->get($this->_id),
-            'assetlist' 			=> $this->getDefinedTable(Realestate\BuildingMasterTable::class)->getAll(),
+            'buildings' 		=> $currentBuildings,
+            'assetlist' 			=> $assetList,
             'locationObj' 		=> $this->getDefinedTable(Administration\LocationTable::class),
             'source_locs' 		=> $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_author,'location'),
             'admin_location' 	=> $admin_loc_array,
             'block' 			=> $this->getDefinedTable(Asset\AssettypeTable::class)->get(array('id'=>[6,7])),
+			'heads'				=> $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
+			'rentSubheads'		=> $rentSubheads,
 			'floor' 			=> $this->getDefinedTable(Realestate\FloorMasterTable::class)->getAll(),
 			'flat_status' 			=> $this->getDefinedTable(Realestate\FlatstatusTable::class)->getAll(),
 			'flat' 				=> $this->getDefinedTable(Realestate\FlatTable::class)->get(array('building'=>$this->_id)),
@@ -346,6 +397,7 @@ class BuildingController extends AbstractActionController
 			'floorObj' => $this->getDefinedTable(Realestate\FloorMasterTable::class),
 			'status' => $this->getDefinedTable(Realestate\FlatstatusTable::class),
 			'buildingsmaster' => $this->getDefinedTable(Realestate\BuildingMasterTable::class),
+			'assetObj' => $this->getDefinedTable(Asset\AssetmanagementTable::class),
 			'block' => $this->getDefinedTable(Asset\AssettypeTable::class),
             'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
             'regionObj' => $this->getDefinedTable(Administration\RegionTable::class),
@@ -740,7 +792,6 @@ class BuildingController extends AbstractActionController
         ));
     }
 
-
 	public function getlocationAction()
 	{		
 		$form = $this->getRequest()->getPost();
@@ -764,17 +815,47 @@ class BuildingController extends AbstractActionController
 	 * **/
 	public function getbuildingAction()
 	{
+		$this->init();
 		$form = $this->getRequest()->getPost();
-		$location=$form['location_id'];
-        $type=$form['type'];
-		$building= $this->getDefinedTable(Realestate\BuildingMasterTable::class)->get(array('location'=>$location,'type'=>$type));	
+		$typeRaw = isset($form['type']) ? trim((string)$form['type']) : '';
+		$type = is_numeric($typeRaw) ? (int)$typeRaw : 0;
+		if ($type <= 0 && $typeRaw !== ''):
+			$typeRow = $this->getDefinedTable(Asset\AssettypeTable::class)->get(array('name' => $typeRaw));
+			foreach($typeRow as $assetType):
+				$type = (int)$assetType['id'];
+				break;
+			endforeach;
+		endif;
+		$building = array();
+		if($type > 0):
+			$building = $this->getDefinedTable(Asset\AssetmanagementTable::class)->get(array('a.asset_type' => $type));
+		endif;
 		
-		$buildinglist = "<option value='-1'></option>";
+		$buildinglist = "<option value=''></option>";
+		if (empty($building) && $type > 0):
+			$buildinglist .= "<option value='' disabled>No asset found for selected type</option>";
+		endif;
 		foreach($building as $building):
 			$buildinglist.="<option value='".$building['id']."'>".$building['name']."</option>";
 		endforeach;
 		echo json_encode(array(
 				'building' => $buildinglist,
+		));
+		exit;
+	}
+
+	public function getsubheadAction()
+	{
+		$form = $this->getRequest()->getPost();
+		$head = isset($form['head']) ? (int)$form['head'] : 0;
+		$subheads = ($head > 0) ? $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.head' => $head)) : array();
+
+		$subheadlist = "<option value=''></option>";
+		foreach($subheads as $subhead):
+			$subheadlist .= "<option value='".$subhead['id']."'>".$subhead['code']." - ".$subhead['name']."</option>";
+		endforeach;
+		echo json_encode(array(
+			'subhead' => $subheadlist,
 		));
 		exit;
 	}

@@ -39,11 +39,17 @@
 					<!-- <div class="space-12"></div>
 					<button type="submit" class="btn btn-sm btn-primary "><i class="fa fa-refresh"></i> Refresh </button>		 -->
 				</div>
-				<?php if(sizeof($this->rentObj->get(array('year'=>$currentYear,'month'=>$month,'location'=>$admin_locs)))==0 && sizeof($rentlist)>0):?>
+				<?php 
+					$existingRentFilter = array('year'=>$currentYear,'month'=>$month,'location'=>$admin_locs);
+					if (!empty($is_highest_role)) {
+						$existingRentFilter = array('year'=>$currentYear,'month'=>$month);
+					}
+				?>
+				<?php if(sizeof($this->rentObj->get($existingRentFilter))==0 && (!empty($is_highest_role) || sizeof($rentlist)>0)):?>
 				<div class="col-lg-2">
 					<div class="clearfix">
 						<div class="pull-right tableTools-container">
-						<a href="<?php echo $this->url('rent', array('action'=>'generaterent','id'=>$currentYear.'-'.$month.'-'.$admin_locs));?>"  class="btn btn-primary" onclick="confirmSubmit(this);" >
+						<a href="<?php echo $this->url('rent', array('action'=>'generaterent','id'=>$currentYear.'-'.$month.'-'.$generate_location));?>"  class="btn btn-primary" onclick="confirmSubmit(this);" >
 						Generate Rent for the month of <?php echo date('F, Y', strtotime('1-'.$month.'-'.$currentYear));?>
 					</a>
 					</div>

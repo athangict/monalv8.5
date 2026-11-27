@@ -20,7 +20,12 @@ $edit_option = 0;
 if(sizeof($current_flow) > 0){
 	foreach($current_flow as $current);
 	$userRolesArray = explode(",", (string) $login_role);
-	$edit_option = (in_array($current['actor'],$userRolesArray))?1:0;
+	$roleIds = array_map('intval', array_filter($userRolesArray, 'is_numeric'));
+	$isHighestRole = in_array(99, $roleIds, true) || in_array(100, $roleIds, true);
+	$hasCurrentAssignment = !empty($current['role_id'])
+		? (int) $current['role_id'] === (int) $login_id
+		: in_array((int) $current['actor'], $roleIds, true);
+	$edit_option = ($hasCurrentAssignment || $isHighestRole) ? 1 : 0;
 }
 ?>
 <div class="space"></div>

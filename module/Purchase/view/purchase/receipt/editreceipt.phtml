@@ -37,7 +37,7 @@
 									<label for="po_no" class="control-label">PO No.</label>
 									<select class="form-control" name="po_no" id="po_no" data-placeholder="Select" >
 										<option value=""></option>	
-										<?php foreach ($this->pur_ordersObj->get(array('destination'=>$source_locs,'status'=>4)) as $po): ?>
+										<?php foreach ($this->pur_ordersObj->get($purchase_order) as $po): ?>
 											<option value="<?php echo $po['id'];?>" <?php echo ($po['id']==$purchase_order)?'selected':'';?>>
 												<?php echo $po['po_no']; ?>
 											</option>
@@ -76,7 +76,7 @@
 						<div class="row">
 							<div class="col-lg-12">
 								<label class="control-label" for="note">Note: </label>
-								<textarea class="form-control" name="note" id="note"></textarea>
+								<textarea class="form-control" name="note" id="note"><?php echo $note; ?></textarea>
 							</div>
 						</div>
 						<div class="space-12"></div>

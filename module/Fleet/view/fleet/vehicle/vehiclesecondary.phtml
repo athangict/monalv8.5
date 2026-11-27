@@ -18,10 +18,12 @@
 				<tr>
 					<th>#</th>
 					<th>Date </th>
-					<th>License Plate </th>
+					<th>Vehicle </th>
+					<th>Vehicle Group </th>
 					<th>Vehicle Location </th>
 					<th>Head</th>
 					<th>Sub Head</th>
+					<th>Type</th>
 					<th class="no-sort no-printpdf">Action</th>	
 				</tr>
 			</thead>
@@ -31,10 +33,13 @@
 				<tr>
 					<td><?php echo $i++;?></td>
 					<td><?php echo $transport['registered_date'];?></td>
-					<td><?php echo $this->recordObj->getColumn($transport['license_plate'],'license_plate');?></td>
+					<?php $vehicleId = isset($transport['asset_vehicle_id']) ? (int)$transport['asset_vehicle_id'] : 0; ?>
+					<td><?php echo trim($this->assetObj->getColumn($vehicleId,'code').' - '.$this->assetObj->getColumn($vehicleId,'name'), ' -');?></td>
+					<td><?php echo $this->groupObj->getColumn((int)($transport['vehicle_group'] ?? 0),'group');?></td>
 					<td><?php echo $this->locationObj->getColumn($transport['location'],'location');?></td>
-					<td><?php echo $this->headObj->getColumn($transport['head'],'code');?></td>
-					<td><?php echo $this->subheadObj->getColumn($transport['subhead'],'name');?></td>
+					<td><?php echo trim($this->headObj->getColumn($transport['head'],'code').' - '.$this->headObj->getColumn($transport['head'],'name'), ' -');?></td>
+					<td><?php echo trim($this->subheadObj->getColumn($transport['subhead'],'code').' - '.$this->subheadObj->getColumn($transport['subhead'],'name'), ' -');?></td>
+					<td><?php echo (isset($transport['pol']) && (string)$transport['pol'] === '1') ? 'POL' : 'Service';?></td>
 					<td class="action"><?php echo $this->button(1,$transport['id']);?>
 						
 					</td>						

@@ -16,9 +16,7 @@ endforeach;
 				<h5 class="widget-title lighter smaller">
 					<i class="fa fa-asterisk"></i>&nbsp;&nbsp; ELC Costing Sheet | <?php echo $costing_no; ?> <?php echo $this->status($status);?>
 				</h5>
-                    <a data-toggle="modal" data-target = "#modal" class="btn btn-xs btn-danger pull-right" href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "9-".$costing_sheet_id)); ?>" title="View Activity Logs">
-					<i class="ace-icon fa fa-plus bigger-120" ></i>  
-				</a>		
+                    <?php echo $this->button(6, "9-".$costing_sheet_id, 0, 3);?>		
 			</div>
 			<div class="widget-body">
 				<div class="widget-main">
@@ -300,9 +298,7 @@ endforeach;
 											<td>-</td>
 											<?php endif;?>
 											<td>
-                                                <a data-toggle="modal" data-target = "#modal" class="pull-right blue" title="View Activity Logs"
-													href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "10-".$costItemDtl['id'])); ?>">
-														<i class="fa fa-plus"></i></a>
+                                                <?php echo $this->button(6, "10-".$costItemDtl['id'], 0, 3);?>
 												<?php
 												if($costItemDtl['status'] == "1"){ ?>													
 													<input type="checkbox" name="view_dtls[]" value="<?php echo $costItemDtl['id']; ?>">

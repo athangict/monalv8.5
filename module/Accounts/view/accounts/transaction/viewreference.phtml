@@ -44,9 +44,7 @@
 				</a>
 			</div>
 			<div class="widget-toolbar hidden-xs">
-				<a class="voucher-header-action btn btn-xs btn-danger" data-toggle="modal" data-target="#modal" href="<?php echo $this->url('application', array('action' => 'activitylog', 'id' => $activityProcess.'-'.$row['id'])); ?>" title="View Activity Logs">
-					<i class="ace-icon fa fa-list-alt"></i>
-				</a>
+				<?php echo $this->button(6, $activityProcess."-".$row['id'], '', '3'); ?>
 			</div>
 			<div class="widget-toolbar hidden-xs">
 				<a class="voucher-header-action btn btn-white btn-warning btn-bold btn-xs" title="Add new Transaction"

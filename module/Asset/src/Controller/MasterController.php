@@ -163,11 +163,12 @@ class MasterController extends AbstractActionController
 			$data = array(
 				'code' 			=> $form['code'],
 				'name' 			=> $form['name'],
-				'class' 		=> $form['classid'], 
 				'subhead' 		=> $form['subhead'],
 				'status' 		=> 1,
 				'manual'		=> $form['manual'],
 				'dep_subhead'	=> $form['depreciation'],
+				'disposal_subhead' => $form['disposal'],
+				'writeoff_subhead' => $form['writeoff'],
 				'author' 		=>$this->_author,
 				'created' 		=>$this->_created,
 				'modified' 		=>$this->_modified,
@@ -182,9 +183,13 @@ class MasterController extends AbstractActionController
 			endif;
 			return $this->redirect()->toRoute('mastera', array('action'=>'assettype'));
 		}
+		$expenseSubheads = $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('c.code' => 'EXP'));
+		if (empty($expenseSubheads)):
+			$expenseSubheads = $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('c.name' => 'EXPENSE'));
+		endif;
 		$ViewModel = new ViewModel(array(
-			'class'      => $this->getDefinedTable(Accounts\ClassTable::class)->getAll(),
-			'depreSh'      => $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.head'=>[180,194,199])),
+			'assetSubheads' => $this->getDefinedTable(Accounts\SubheadTable::class)->getAll(),
+			'depreSh'      => $expenseSubheads,
 		));
 		$ViewModel->setTerminal(True);
 		return $ViewModel;
@@ -207,11 +212,12 @@ class MasterController extends AbstractActionController
 				'id' => $this->_id,
 				'code' => $form['code'],
 				'name' => $form['name'],
-				'class' => $form['classid'],
 				'subhead' => $form['subhead'],
 				'status' =>1,
 				'manual'		=> $form['manual'],
 				'dep_subhead'	=> $form['depreciation'],
+            	'disposal_subhead' => $form['disposal'],
+				'writeoff_subhead' => $form['writeoff'],
 				'author' =>$this->_author,
 				'created' =>$this->_created,
 				'modified' =>$this->_modified,
@@ -229,12 +235,63 @@ class MasterController extends AbstractActionController
             endif;
             return $this->redirect()->toRoute('mastera', array('action'=>'assettype'));
         }  
+		$expenseSubheads = $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('c.code' => 'EXP'));
+		if (empty($expenseSubheads)):
+			$expenseSubheads = $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('c.name' => 'EXPENSES'));
+		endif;
+		$currentDepSubhead = $this->getDefinedTable(Asset\AssettypeTable::class)->getColumn($assettype_id, 'dep_subhead');
+		if (!empty($currentDepSubhead)):
+			$present = false;
+			foreach($expenseSubheads as $subheadRow):
+				if ((int)$subheadRow['id'] === (int)$currentDepSubhead):
+					$present = true;
+					break;
+				endif;
+			endforeach;
+			if (!$present):
+				$currentDepRows = $this->getDefinedTable(Accounts\SubheadTable::class)->get($currentDepSubhead);
+				foreach($currentDepRows as $currentDepRow):
+					$expenseSubheads[] = $currentDepRow;
+				endforeach;
+			endif;
+		endif;
+		$currentDisposalSubhead = $this->getDefinedTable(Asset\AssettypeTable::class)->getColumn($assettype_id, 'disposal_subhead');
+		if (!empty($currentDisposalSubhead)):
+			$present = false;
+			foreach($expenseSubheads as $subheadRow):
+				if ((int)$subheadRow['id'] === (int)$currentDisposalSubhead):
+					$present = true;
+					break;
+				endif;
+			endforeach;
+			if (!$present):
+				$currentDisposalRows = $this->getDefinedTable(Accounts\SubheadTable::class)->get($currentDisposalSubhead);
+				foreach($currentDisposalRows as $currentDisposalRow):
+					$expenseSubheads[] = $currentDisposalRow;
+				endforeach;
+			endif;
+		endif;
+		$currentWriteoffSubhead = $this->getDefinedTable(Asset\AssettypeTable::class)->getColumn($assettype_id, 'writeoff_subhead');
+		if (!empty($currentWriteoffSubhead)):
+			$present = false;
+			foreach($expenseSubheads as $subheadRow):
+				if ((int)$subheadRow['id'] === (int)$currentWriteoffSubhead):
+					$present = true;
+					break;
+				endif;
+			endforeach;
+			if (!$present):
+				$currentWriteoffRows = $this->getDefinedTable(Accounts\SubheadTable::class)->get($currentWriteoffSubhead);
+				foreach($currentWriteoffRows as $currentWriteoffRow):
+					$expenseSubheads[] = $currentWriteoffRow;
+				endforeach;
+			endif;
+		endif;
         $ViewModel = new ViewModel(array(
 			'title' => 'Edit Asset Type',
 			'assettype' => $this->getDefinedTable(Asset\AssettypeTable::class)->get($assettype_id),
-			'classes' => $this->getDefinedTable(Accounts\ClassTable::class)->getAll(),
-			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
-			'depreSh'      => $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.head'=>[180,194,199])),
+			'assetSubheads' => $this->getDefinedTable(Accounts\SubheadTable::class)->getAll(),
+			'depreSh'      => $expenseSubheads,
 	    ));
 		$ViewModel->setTerminal(True);
 		return $ViewModel;

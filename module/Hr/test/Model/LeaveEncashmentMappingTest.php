@@ -13,7 +13,7 @@ final class LeaveEncashmentMappingTest extends TestCase
         $adapter = new Adapter(['driver' => 'Pdo_Sqlite', 'database' => ':memory:']);
         $column = $explicitMapping ? ', fa_sub_head INTEGER' : '';
         foreach ([
-            'CREATE TABLE hr_pay_head_type (id INTEGER, code TEXT' . $column . ')',
+            'CREATE TABLE hr_pay_head_type (id INTEGER, code TEXT, head_type TEXT' . $column . ')',
             'CREATE TABLE fa_head (id INTEGER, name TEXT)',
             'CREATE TABLE fa_sub_head (id INTEGER, head INTEGER, type INTEGER, ref_id INTEGER)',
             "INSERT INTO fa_head VALUES (88, 'Provision'), (22, 'Employee Compensation & Benefits')",
@@ -27,14 +27,14 @@ final class LeaveEncashmentMappingTest extends TestCase
     public function testResolvesProvisionWithDifferentIdsUsingLegacyMapping(): void
     {
         $adapter = $this->createAdapter(false);
-        $adapter->query("INSERT INTO hr_pay_head_type VALUES (77, 'LE'), (1, 'BP')", Adapter::QUERY_MODE_EXECUTE);
+        $adapter->query("INSERT INTO hr_pay_head_type VALUES (77, 'LE', 'Leave Encashment'), (1, 'BP', 'Basic Pay')", Adapter::QUERY_MODE_EXECUTE);
         self::assertSame(901, (new PayheadtypeTable($adapter))->getLeaveEncashmentSubheadId());
     }
 
     public function testPrefersExplicitMappingOverLegacyMapping(): void
     {
         $adapter = $this->createAdapter(true);
-        $adapter->query("INSERT INTO hr_pay_head_type VALUES (77, 'LE', 903)", Adapter::QUERY_MODE_EXECUTE);
+        $adapter->query("INSERT INTO hr_pay_head_type VALUES (77, 'LE', 'Leave Encashment', 903)", Adapter::QUERY_MODE_EXECUTE);
         $adapter->query('INSERT INTO fa_sub_head VALUES (903, 88, 5, 999)', Adapter::QUERY_MODE_EXECUTE);
         self::assertSame(903, (new PayheadtypeTable($adapter))->getLeaveEncashmentSubheadId());
     }
@@ -42,23 +42,51 @@ final class LeaveEncashmentMappingTest extends TestCase
     public function testDoesNotFallBackToBasicPayWhenProvisionIsMissing(): void
     {
         $adapter = $this->createAdapter(false);
-        $adapter->query("INSERT INTO hr_pay_head_type VALUES (1, 'BP')", Adapter::QUERY_MODE_EXECUTE);
+        $adapter->query("INSERT INTO hr_pay_head_type VALUES (1, 'BP', 'Basic Pay')", Adapter::QUERY_MODE_EXECUTE);
         self::assertNull((new PayheadtypeTable($adapter))->getLeaveEncashmentSubheadId());
-        $adapter->query("INSERT INTO hr_pay_head_type VALUES (78, 'LE')", Adapter::QUERY_MODE_EXECUTE);
+        $adapter->query("INSERT INTO hr_pay_head_type VALUES (78, 'LE', 'Leave Encashment')", Adapter::QUERY_MODE_EXECUTE);
         self::assertNull((new PayheadtypeTable($adapter))->getLeaveEncashmentSubheadId());
     }
 
     public function testRejectsDuplicateLeaveEncashmentCodes(): void
     {
         $adapter = $this->createAdapter(false);
-        $adapter->query("INSERT INTO hr_pay_head_type VALUES (77, 'LE'), (78, 'LE')", Adapter::QUERY_MODE_EXECUTE);
+        $adapter->query("INSERT INTO hr_pay_head_type VALUES (77, 'LE', 'Leave Encashment'), (78, 'LE', 'Leave Encashment')", Adapter::QUERY_MODE_EXECUTE);
+        self::assertNull((new PayheadtypeTable($adapter))->getLeaveEncashmentSubheadId());
+    }
+
+    public function testResolvesLeaveEncashmentByNameWhenCodeDiffers(): void
+    {
+        $adapter = $this->createAdapter(false);
+        $adapter->query("INSERT INTO hr_pay_head_type VALUES (77, 'L', 'leave encashment')", Adapter::QUERY_MODE_EXECUTE);
+        self::assertSame(901, (new PayheadtypeTable($adapter))->getLeaveEncashmentSubheadId());
+    }
+
+    public function testMatchesLeaveEncashmentCodeWithoutCaseSensitivity(): void
+    {
+        $adapter = $this->createAdapter(false);
+        $adapter->query("INSERT INTO hr_pay_head_type VALUES (77, 'le', 'Other Type')", Adapter::QUERY_MODE_EXECUTE);
+        self::assertSame(901, (new PayheadtypeTable($adapter))->getLeaveEncashmentSubheadId());
+    }
+
+    public function testRecognizesSalaryTaxAndTdsNamesWithoutCaseSensitivity(): void
+    {
+        self::assertTrue(PayheadtypeTable::isSalaryTaxOrTdsName('salary tax'));
+        self::assertTrue(PayheadtypeTable::isSalaryTaxOrTdsName('Monthly TDS deduction'));
+        self::assertFalse(PayheadtypeTable::isSalaryTaxOrTdsName('Income Tax'));
+    }
+
+    public function testRejectsAmbiguousCodeAndNameMatches(): void
+    {
+        $adapter = $this->createAdapter(false);
+        $adapter->query("INSERT INTO hr_pay_head_type VALUES (77, 'LE', 'Leave Encashment'), (78, 'L', 'Leave Encashment Provision')", Adapter::QUERY_MODE_EXECUTE);
         self::assertNull((new PayheadtypeTable($adapter))->getLeaveEncashmentSubheadId());
     }
 
     public function testRejectsInvalidExplicitAccountMappings(): void
     {
         $adapter = $this->createAdapter(true);
-        $adapter->query("INSERT INTO hr_pay_head_type VALUES (77, 'LE', 903)", Adapter::QUERY_MODE_EXECUTE);
+        $adapter->query("INSERT INTO hr_pay_head_type VALUES (77, 'LE', 'Leave Encashment', 903)", Adapter::QUERY_MODE_EXECUTE);
         $table = new PayheadtypeTable($adapter);
         self::assertNull($table->getLeaveEncashmentSubheadId());
         $adapter->query('INSERT INTO fa_sub_head VALUES (903, 88, 3, 77)', Adapter::QUERY_MODE_EXECUTE);

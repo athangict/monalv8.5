@@ -12,6 +12,7 @@ use Laminas\Db\Sql\Expression;
 class PaymentTable extends AbstractTableGateway 
 {
 	protected $table = 'pur_payment';   //tablename
+	protected $tableColumns = null;
 
 	public function __construct(Adapter $adapter)
     {
@@ -41,22 +42,58 @@ class PaymentTable extends AbstractTableGateway
 	 */
 	public function getDateWise($column,$year,$month)
 	{	
+		$year = (int)$year;
+		$month = (int)$month;
+		if($year <= 0):
+			$year = (int)date('Y');
+		endif;
+		if($month <= 0 || $month > 12):
+			$month = (int)date('n');
+		endif;
+		$filterColumn = "COALESCE(NULLIF(".$column.", ''), created)";
 		$adapter = $this->adapter;
 		$sql = new Sql($adapter);
 		$select = $sql->select();
+		$availableColumns = $this->getTableColumns();
+		$requestedColumns = array(
+			'id','bill_no','billing_date','location','supplier','net_amount',
+			'discount','receipt_amt','freight','freight_party','tax','tax_party',
+			'freight_ref','tax_ref','ref_no','total','note','status','author','created','modified'
+		);
+		$selectColumns = array();
+		foreach($requestedColumns as $requestedColumn):
+			if(in_array($requestedColumn, $availableColumns, true)):
+				$selectColumns[$requestedColumn] = $requestedColumn;
+			endif;
+		endforeach;
+		$selectColumns['year'] = new Expression('YEAR('.$filterColumn.')');
+		$selectColumns['month'] = new Expression('MONTH('.$filterColumn.')');
 		$select->from($this->table)
-                 ->columns(array(
-					'id','bill_no','billing_date','location','supplier','net_amount',
-					'discount','receipt_amt','freight','freight_party','tax','tax_party','freight_ref','tax_ref','ref_no','total','note','status','author','created','modified',
-					'year' => new Expression('YEAR('.$column.')'),
-					'month' => new Expression('MONTH('.$column.')'),
-			   ))->having(array('year' => $year, 'month' => $month))
+                 ->columns($selectColumns)
+			   ->where(new Expression('YEAR('.$filterColumn.') = ?', array($year)))
+			   ->where(new Expression('MONTH('.$filterColumn.') = ?', array($month)))
 	    	   ->order(array('id DESC'));
 		       
 		$selectString = $sql->getSqlStringForSqlObject($select);
 		
 		$results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();
 		return $results;
+	}
+	protected function getTableColumns()
+	{
+		if(is_array($this->tableColumns)):
+			return $this->tableColumns;
+		endif;
+		$sql = sprintf('SHOW COLUMNS FROM `%s`', $this->table);
+		$rows = $this->adapter->query($sql, $this->adapter::QUERY_MODE_EXECUTE)->toArray();
+		$columns = array();
+		foreach($rows as $row):
+			if(isset($row['Field'])):
+				$columns[] = $row['Field'];
+			endif;
+		endforeach;
+		$this->tableColumns = $columns;
+		return $this->tableColumns;
 	}
 	
 	/**

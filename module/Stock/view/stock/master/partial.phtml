@@ -2,6 +2,7 @@
 	$uomtype = ($this->active == "uomtype")?"active":"";
 	$uom = ($this->active == "uom")?"active":"";
 	$scalar = ($this->active == "scalar")?"active":"";
+	$gst = ($this->active == "gst")?"active":"";
 	$charge = ($this->active == "chargetax")?"active":"";
 	$costing_head = ($this->active == "costinghead")?"active":"";
 	$trip= ($this->active == "trip")?"active":"";
@@ -11,7 +12,6 @@
         $cagre = ($this->active == "cagreement")?"active":"";
   
 ?>
-<br/>
 <ul class="nav nav-tabs padding-18 nav-fixed-top" id="myTab">
 	<li class="<?php echo $uomtype; ?>">
 		<a href="<?php echo $this->url('stmaster', array('action' => 'uomtype')); ?>" title="UOM Type">
@@ -23,6 +23,12 @@
 		<a href="<?php echo $this->url('stmaster', array('action' => 'uom')); ?>" title="">
 			<i class="green ace-icon fa fa-filter bigger-120"></i>
 			<span class="hidden-xs">UOM</span>
+		</a>
+	</li>
+	<li class="<?php echo $gst; ?>">
+		<a href="<?php echo $this->url('stmaster', array('action' => 'gst')); ?>" title="GST Rate">
+			<i class="blue ace-icon fa fa-percent bigger-120"></i>
+			<span class="hidden-xs">GST</span>
 		</a>
 	</li>
 	<!--li class="<?php echo $scalar; ?>">

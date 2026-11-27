@@ -102,6 +102,22 @@
 									</select> 
 								</div>
 							</div>		
+							<div class="col-lg-3">
+								<div class="form-group">
+									<label for="sub_head" class="control-label">Sub Head</label>
+									<select id="sub_head" name="sub_head" class="form-control" data-placeholder="Select" required>
+										<option value=""></option>
+										<?php foreach($subheads as $subhead):
+											$selected_subhead = (isset($sub_head) && $subhead['id'] == $sub_head) ? "selected" : "";
+											$subhead_label = implode(' | ', array($subhead['class'], $subhead['group'], $subhead['head_type'], $subhead['head'], $subhead['sub_head']));
+										?>
+											<option value="<?php echo $subhead['id']; ?>" <?php echo $selected_subhead; ?>>
+												<?php echo $this->escapeHtml($subhead_label); ?>
+											</option>
+										<?php endforeach; ?>
+									</select>
+								</div>
+							</div>
 						</div>
 						<div class="row">
 						    <div class="col-lg-3"> 
@@ -183,8 +199,12 @@
 						<div class="row">
 						   <div class="col-lg-12"> 
 							  <h5>Issue Details</h5>
-								 <div>
-									<table id="trdetails_table" class="table small-padding">
+								 <div class="transaction-details">
+									<table id="trdetails_table" class="table small-padding account-entry-details issue-entry-details">
+										<colgroup>
+											<col span="9">
+											<col class="transaction-action-column">
+										</colgroup>
 										<thead>
 											<tr>
 												<th>Item</th>
@@ -424,12 +444,19 @@ $(function() {
 		$('form').formValidation('revalidateField', $(this).attr('id'));
 	});
 
-	$('#trdetails_table').issue({
-		getToLocation:'<?php echo $this->url('inissue', array('action' => 'gettolocation'));?>',
-		getItem:'<?php echo $this->url("inissue", array("action" => "getitemgroup"));?>',
-		getDetails:'<?php echo $this->url("inissue", array("action" => "getdetails"));?>',
-		getStockBalance:'<?php echo $this->url("inissue", array("action" => "getstockbalance"));?>',
-	});
+	var initIssueRows = function(){
+		if($('#trdetails_table tbody tr:first').attr('id')){
+			return;
+		}
+		$('#trdetails_table').issue({
+			getToLocation:'<?php echo $this->url('inissue', array('action' => 'gettolocation'));?>',
+			getItem:'<?php echo $this->url("inissue", array("action" => "getitemgroup"));?>',
+			getDetails:'<?php echo $this->url("inissue", array("action" => "getdetails"));?>',
+			getStockBalance:'<?php echo $this->url("inissue", array("action" => "getstockbalance"));?>',
+		});
+	};
+	initIssueRows();
+	setTimeout(initIssueRows, 0);
 
 	/*** Form Validation ***/  
 		const fv = FormValidation.formValidation(document.getElementById('#form'), {
@@ -542,5 +569,20 @@ $(function() {
 				$('div#'+ e.field.replace('[]','') +'_chosen').addClass('is-invalid');
 			}
 		});  
+});
+</script>
+<script type="text/javascript">
+$(function(){
+	setTimeout(function(){
+		if(!$('#trdetails_table').length || $('#trdetails_table tbody tr:first').attr('id')){
+			return;
+		}
+		$('#trdetails_table').issue({
+			getToLocation:'<?php echo $this->url('inissue', array('action' => 'gettolocation'));?>',
+			getItem:'<?php echo $this->url("inissue", array("action" => "getitemgroup"));?>',
+			getDetails:'<?php echo $this->url("inissue", array("action" => "getdetails"));?>',
+			getStockBalance:'<?php echo $this->url("inissue", array("action" => "getstockbalance"));?>',
+		});
+	}, 200);
 });
 </script>

@@ -21,13 +21,24 @@
 					</div>
 				</div>
 				<div class="form-group">
+					<label for="vehicle_group" class="control-label">Vehicle Group</label>
+					<select id="vehicle_group" name="vehicle_group" class="form-control" data-placeholder="Select Vehicle Group" required>
+						<option value=""></option>
+						<?php foreach($this->groupObj->getAll() as $groups):?>
+							<option value="<?php echo $groups['id'];?>">
+								<?php echo $groups['group'];?>
+							</option>
+						<?php endforeach;?>
+					</select>
+				</div>
+				<div class="form-group">
 					<div class="form-group">
-						<label for="class" class="control-label">License plate </label>
-						<select id="license_plate" name="license_plate" class="form-control" data-placeholder="Select Head" required>
+						<label for="vehicle" class="control-label">Vehicle </label>
+						<select id="vehicle" name="vehicle" class="form-control" data-placeholder="Select Vehicle" required>
 							<option value=""></option>
-							<?php foreach ($plate as $plates):?>
-								<option value="<?php echo $plates['id']; ?>">
-								<?php echo $plates['license_plate']; ?>
+							<?php foreach ($vehicles as $vehicle):?>
+								<option value="<?php echo $vehicle['id']; ?>">
+								<?php echo trim($vehicle['code'].' - '.$vehicle['name'], ' -'); ?>
 								</option>
 							<?php endforeach;?>								
 						</select> 
@@ -41,23 +52,19 @@
 				</div>
 				<div class="form-group">
 					<label for="class" class="control-label"> Head </label>
-					<select id="head" name="head" class="form-control" data-placeholder="Select Head" required>
-						<option value=""></option>
+					<select id="head" name="head[]" class="form-control" data-placeholder="Select Head" multiple required>
 						<?php
 							foreach ($head as $heads):
 						?>
 							<option value="<?php echo $heads['id']; ?>">
-							<?php echo $heads['code']; ?>
+							<?php echo $heads['code']; ?> - <?php echo $heads['name']; ?>
 							</option>
 						<?php endforeach;?>								
 					</select> 
 				</div>
 				<div class="form-group">
-					<label for="subhead" class="control-label">Subhead</label>
-					<select id="subhead" name="subhead" class="form-control" data-placeholder="Select" required>
-						<option value=""></option>
-													
-					</select> 
+					<label class="control-label">Subhead</label>
+					<div class="text-muted">Subhead code and name will be auto-created from selected vehicle code and name for each selected head.</div>
 				</div>
 				<div class="radio">
 					<label>  
@@ -81,22 +88,18 @@
 	$(function(){
 			$('#registered_date').datepicker();
 		$('select#head').on('change', function() {
-			$.post(
-				"<?php echo $this->url('vehicle', ['action'=>'getsubhead']); ?>",
-				{
-					headId: $(this).val()
-				},
-				function(data){
-					$('select#subhead').html(data.subhead);
-					$('select#subhead').trigger('chosen:updated');
-				},'json'
-			);
+	fv.revalidateField('head[]');
 		});
-		$('select#license_plate').on('change', function() {
+		$('select#vehicle').on('change', function() {
+			if($(this).val() === ''){
+				$('select#location').html("<option value=''></option>");
+				$('select#location').trigger('chosen:updated');
+				return;
+			}
 			$.post(
 				"<?php echo $this->url('vehicle', ['action'=>'getlocation']); ?>",
 				{
-					licenseId: $(this).val()
+					vehicleId: $(this).val()
 				},
 				function(data){
 					$('select#location').html(data.location);
@@ -106,10 +109,10 @@
 		});
 		const fv = FormValidation.formValidation(document.getElementById('#form'), {
 			fields: {
-				license_plate: {
+				vehicle: {
 					validators: {
 						notEmpty: {
-							message: 'Please provide license plate .'
+							message: 'Please select vehicle.'
 						},
 					}
 				},
@@ -119,21 +122,21 @@
 							message: 'Please provide date of birth.'
 						},
 					}
-				},	
-				head: {
+				},
+				vehicle_group: {
 					validators: {
 						notEmpty: {
-							message: 'Please provide date of birth.'
+							message: 'Please select vehicle group.'
+						},
+					}
+				},
+				'head[]': {
+					validators: {
+						notEmpty: {
+							message: 'Please select at least one head.'
 						},
 					}
 				},	
-				subhead: {
-					validators: {
-						notEmpty: {
-							message: 'Please select posted location.'
-						}
-					}
-				},
 			},
 			plugins: {
 				trigger: new FormValidation.plugins.Trigger(),
@@ -142,7 +145,7 @@
 				defaultSubmit: new FormValidation.plugins.DefaultSubmit(),
 			},
 		}).on('core.element.validated', function (e) {
-			//console.log(document.getElementsByName('license_plate')[0].value); // Console log the license plate value
+			//console.log(document.getElementsByName('vehicle')[0].value); // Console log the vehicle value
 			if (e.valid) {
 				$('div#'+ e.field.replace('[]','') +'_chosen').removeClass('is-invalid');
 				$('div#'+ e.field.replace('[]','') +'_chosen').addClass('is-valid');

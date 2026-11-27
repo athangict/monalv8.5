@@ -22,6 +22,10 @@
 							$this.remove();
 						}
 					}),
+					reportdom.find('div#convert-tb1, div#convert-tb2').removeClass().css({'width':'100%','float':'none'}),
+					reportdom.find('div#convert-tb0').wrap('<table width="100%" id="nivoice-tab0"><tr></tr></table>'),
+					reportdom.find('div#convert-tb1').wrap('<td width="65%" style="text-align:left;vertical-align:top;"></td>'),
+					reportdom.find('div#convert-tb2').wrap('<td width="35%" style="text-align:left;vertical-align:top;"></td>'),
 					reportdom.find('div').each(function(){
 						var $this = $(this);
 						if($this.hasClass('space')){

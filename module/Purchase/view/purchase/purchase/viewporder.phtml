@@ -46,7 +46,7 @@
 				<div class="widget-main padding-12">
 					<div id="report-print">
 						<div class="row" id="convert-tb0">
-							<div class="col-lg-8" id="convert-tb1">
+							<div class="col-xs-8 col-sm-8 col-md-8 col-lg-8" id="convert-tb1">
 								<ul class="list-unstyled spaced">
 									<li>
 										<i class="ace-icon fa fa-caret-right blue"></i>
@@ -63,7 +63,7 @@
 									
 								</ul>
 							</div>
-							<div class="col-lg-4" id="convert-tb2">
+							<div class="col-xs-4 col-sm-4 col-md-4 col-lg-4" id="convert-tb2">
 								<ul class="list-unstyled spaced">
 									<li>
 										<i class="ace-icon fa fa-caret-right blue"></i>
@@ -98,18 +98,18 @@
 						<div class="space-6"></div>
 						<div class="row">
 							<div class="col-lg-12" >
-								<table class="table" style="border:2px solid #ddd;">
+								<table class="table" width="100%" style="width:100%;border:1px solid #ddd;margin:0;">
 									<thead>
 										<tr>
-											<th width=15>#</th>
-											<th>Item Class</th>
-											<th>Item</th>
-											<th>Subhead</th>
-											<th>UOM</th>
-											<th>Quantity</th>
-											<th>Rate(<?php //echo $this->currency_code();?>)</th>
-											<th>Amount (<?php //echo $this->currency_code();?>)</th>
-											<th>Remarks</th>
+											<th width="3%">#</th>
+											<th width="11%">Item Class</th>
+											<th width="11%">Item</th>
+											<th width="11%">Subhead</th>
+											<th width="11%">UOM</th>
+											<th width="11%">Quantity</th>
+											<th width="11%">Rate(<?php //echo $this->currency_code();?>)</th>
+											<th width="11%">Amount (<?php //echo $this->currency_code();?>)</th>
+											<th width="20%">Remarks</th>
 										</tr>
 									</thead>
 									<tbody>
@@ -118,23 +118,30 @@
 													$qty = $tdrow['quantity'];
 													$rate = $tdrow['rate'];
 													$amt = $qty * $rate;
+													$isAssetRow = ((int)$tdrow['item_class'] === 33) || ((int)$tdrow['item_class'] <= 0 && (int)$tdrow['item'] <= 0 && !empty($tdrow['item_name']));
 											?>
 											<tr>
-												<td width=15><?php echo $sl++; ?></td>
-												<td><?php echo $this->classObj->getColumn($tdrow['item_class'],'item_class');?></td>
-												<td><?php echo ($tdrow['item_class']==33)?$tdrow['item_name']:$this->itemObj->getColumn($tdrow['item'],'name');?></td>
+												<td width="3%"><?php echo $sl++; ?></td>
+												<td><?php echo $isAssetRow ? 'Asset' : $this->classObj->getColumn($tdrow['item_class'],'item_class');?></td>
+												<td><?php echo $isAssetRow ? $tdrow['item_name'] : $this->itemObj->getColumn($tdrow['item'],'name');?></td>
 												<td><?php echo $this->subheadObj->getColumn($tdrow['subhead'],'name');?></td>
 												<td><?php echo $this->uomObj->getColumn($tdrow['uom'],'code');?></td>
 												<td><?php echo $tdrow['quantity'];?></td>
-												<td><?php echo $tdrow['rate'];?></td>
+												<td><?php echo number_format((float)$tdrow['rate'], 2, '.', '');?></td>
 												<td><?php echo number_format((float)$amt, 2, '.', '');?></td>
 												<td><?php echo $tdrow['remarks'];?></td>
 											</tr>
 										<?php endforeach;?>
 										<tr style="border-top:2px solid #ddd;border-bottom:2px solid #ddd;">
-											<th colspan="6"></th>
-											<th colspan="2">Total : 
-											<?php echo $po_amount;?></th>
+											<th></th>
+											<th></th>
+											<th></th>
+											<th></th>
+											<th></th>
+											<th></th>
+											<th></th>
+											<th></th>
+											<th>Total : <?php echo $po_amount;?></th>
 										</tr>
 									</tbody>
 								</table>
@@ -159,12 +166,59 @@
 </div>
 <script type="text/javascript">
 $(document).ready(function () {
-		$('#print').gentcpdf({
-		content: '#print-content',
-		src:"<?php echo $this->url('print', array('action' => 'index'));?>",
-		orentation:"P",
-		size: 'A4',
+	$('#print').on('click', function(e){
+		e.preventDefault();
+		var reportdom = $('#print-content').clone(true);
+		reportdom.find('.row').css({'margin':'0'});
+		reportdom.find('[class*="col-"]').css({'padding':'0','margin':'0'});
+		reportdom.find('a').remove();
+		reportdom.find('td.no-print, th.no-print').remove();
+		var leftSummaryHtml = reportdom.find('#convert-tb1').html() || '';
+		var rightSummaryHtml = reportdom.find('#convert-tb2').html() || '';
+		reportdom.find('#convert-tb0').replaceWith(
+			'<table width="100%" id="nivoice-tab0" style="border-collapse:collapse;"><tr>' +
+				'<td width="65%" style="width:65%;text-align:left;vertical-align:top;">' + leftSummaryHtml + '</td>' +
+				'<td width="35%" style="width:35%;text-align:left;vertical-align:top;">' + rightSummaryHtml + '</td>' +
+			'</tr></table>'
+		);
+		reportdom.find('div').each(function(){
+			var $this = $(this);
+			if($this.hasClass('space') && $this.html().replace(/\s|&nbsp;/g, '').length === 0){
+				$this.remove();
+				return;
+			}
+			$this.has('div').contents().unwrap();
+		});
+		reportdom.find('span').removeClass().removeAttr('style');
+		reportdom.contents().filter(function(){ return (this.nodeType === 3 && !/\S/.test(this.nodeValue)); }).remove();
+		var pdfTable = reportdom.find('table.table').first();
+		if (pdfTable.length) {
+			var pdfColWidths = ['6mm','21mm','21mm','21mm','21mm','21mm','21mm','21mm','37mm'];
+			pdfTable.attr('width', '190mm').css({'width':'190mm','max-width':'190mm','table-layout':'fixed','margin':'0','border':'1px solid #ddd','border-collapse':'collapse'});
+			pdfTable.find('tr').each(function(){
+				var $cells = $(this).children('th,td');
+				if($cells.length > 9){
+					$cells.slice(9).remove();
+					$cells = $(this).children('th,td');
+				}
+				$cells.each(function(idx){
+					$(this).attr('width', pdfColWidths[idx] || '').css({'width': (pdfColWidths[idx] || '')});
+				});
+			});
+		}
+		$('#report_form').remove();
+		var form = "<form id='report_form' method='post' action='<?php echo $this->url('print', array('action' => 'index'));?>' target='iframe'>"+
+			"<input type='hidden' name='dom'/>"+
+			"<input type='hidden' name='title' value='report'/>"+
+			"<input type='hidden' name='orentation' value='P'/>"+
+			"<input type='hidden' name='size' value='A4'/>"+
+			"</form>";
+		$('body').append(form);
+		$('#report_form input[name=dom]').val($.trim(reportdom.html()));
+		$('#report_form input[name=title]').val($(document).find('title').text());
+		$('#report_form').trigger('submit');
 	});
 });
 
 </script>
+

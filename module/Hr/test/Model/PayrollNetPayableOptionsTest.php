@@ -12,10 +12,10 @@ final class PayrollNetPayableOptionsTest extends TestCase
     {
         $adapter = new Adapter(['driver' => 'Pdo_Sqlite', 'database' => ':memory:']);
         foreach ([
-            'CREATE TABLE hr_pay_head_type (id INTEGER, head_type TEXT)',
+            'CREATE TABLE hr_pay_head_type (id INTEGER, head_type TEXT, code TEXT)',
             'CREATE TABLE fa_head (id INTEGER, name TEXT)',
             'CREATE TABLE fa_sub_head (id INTEGER, head INTEGER, type INTEGER, ref_id INTEGER, code TEXT, name TEXT)',
-            "INSERT INTO hr_pay_head_type VALUES (9, 'Net Payable'), (10, 'Deductions')",
+            "INSERT INTO hr_pay_head_type VALUES (9, 'Net Payable', 'NP'), (10, 'Deductions', 'DED')",
             "INSERT INTO fa_head VALUES (55, 'Current Liability')",
             "INSERT INTO fa_sub_head VALUES (101, 55, 5, 9, 'NP', 'Salary Net Payable'), (102, 55, 3, 9, 'BANK', 'Bank Link')",
         ] as $sql) {
@@ -43,7 +43,7 @@ final class PayrollNetPayableOptionsTest extends TestCase
             'CREATE TABLE fa_sub_head (id INTEGER, head INTEGER, type INTEGER, ref_id INTEGER, code TEXT, name TEXT)',
             "INSERT INTO hr_pay_head_type VALUES (9, 'Net Payable', 'NP', 1, 201), (10, 'Allowance', 'ALW', 0, NULL)",
             "INSERT INTO fa_head VALUES (55, 'Current Liability')",
-            "INSERT INTO fa_sub_head VALUES (201, 55, 5, 999, 'NP201', 'Mapped by column'), (202, 55, 5, 9, 'NP202', 'Legacy ref map')",
+            "INSERT INTO fa_sub_head VALUES (201, 55, 5, 999, 'NP201', 'Mapped by column'), (202, 55, 5, 10, 'NP202', 'Legacy ref map')",
         ] as $sql) {
             $adapter->query($sql, Adapter::QUERY_MODE_EXECUTE);
         }
@@ -56,5 +56,24 @@ final class PayrollNetPayableOptionsTest extends TestCase
         self::assertSame(201, $table->getFinanceSubheadId(9));
         self::assertSame(202, $table->getFinanceSubheadId(10));
         self::assertTrue($table->hasFinanceSubheadColumn());
+    }
+
+    public function testFindsNetPayableByCaseIndependentNameOrCode(): void
+    {
+        $adapter = new Adapter(['driver' => 'Pdo_Sqlite', 'database' => ':memory:']);
+        foreach ([
+            'CREATE TABLE hr_pay_head_type (id INTEGER, head_type TEXT, code TEXT)',
+            'CREATE TABLE fa_head (id INTEGER, name TEXT)',
+            'CREATE TABLE fa_sub_head (id INTEGER, head INTEGER, type INTEGER, ref_id INTEGER, code TEXT, name TEXT)',
+            "INSERT INTO hr_pay_head_type VALUES (9, 'salary net payable', 'NP'), (10, 'Salary Clearing', 'snp'), (11, 'Allowance', 'ALW')",
+            "INSERT INTO fa_head VALUES (55, 'Current Liability')",
+            "INSERT INTO fa_sub_head VALUES (101, 55, 5, 9, 'NP', 'Name matched'), (102, 55, 5, 10, 'SNP', 'Code matched'), (103, 55, 5, 11, 'ALW', 'Unmatched')",
+        ] as $sql) {
+            $adapter->query($sql, Adapter::QUERY_MODE_EXECUTE);
+        }
+
+        $options = (new PayheadtypeTable($adapter))->getPayrollNetPayableOptions(true);
+
+        self::assertSame([10, 9], array_column($options, 'payhead_type_id'));
     }
 }

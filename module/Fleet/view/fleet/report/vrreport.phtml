@@ -14,7 +14,7 @@ $this->headTitle($this->title);
 					<select class="form-control" name="location" id="location" data-placeholder="select" >
 						<option value="-1" <?php echo ($data['location']=='-1')?'selected':'';?>>All</option>
 						<?php 
-							$location = $this->locationObj->getAll();
+							$location = $permitted_locations;
 							foreach($location as $row):
 								$selected_location = ($row['id']==$data['location'])?'selected':'';
 						?>
@@ -26,9 +26,12 @@ $this->headTitle($this->title);
 					</select>
 				</div>
 				<div class="form-group col-lg-2">
-					<label class="control-label" for="license_plate">License plate</label>
+					<label class="control-label" for="license_plate">Vehicle</label>
 					<select class="form-control" name="license_plate" id="license_plate" data-placeholder="select" >
 						<option value="-1" <?php echo ($data['license_plate']=='-1')?'selected':'';?>>All</option>
+						<?php foreach($license as $li):?>
+							<option value="<?php echo $li['id'];?>" <?php echo ($li['id']==$data['license_plate'])?'selected':'';?>><?php echo trim($li['vehicle_code'].' - '.$li['license_plate'], ' -');?></option>
+						<?php endforeach;?>
 					</select>
 				</div>
 				<div class="form-group col-lg-2">
@@ -115,11 +118,15 @@ $this->headTitle($this->title);
 				function(data){
 					$('select#license_plate').html(data.license_plate);
 					$(license_plate).trigger('chosen:updated');
+					var selectedVehicle = "<?php echo isset($data['license_plate']) ? $data['license_plate'] : '-1';?>";
+					$('select#license_plate').val(selectedVehicle);
+					$('select#license_plate').trigger('chosen:updated');
 
 				   },
 				'json'
 			);
 	    });
+		$('select#location').trigger('change');
 		/*** Form Validation ***/
 		const fv = FormValidation.formValidation(document.getElementById('#form'), {
 			fields: {

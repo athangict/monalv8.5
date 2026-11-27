@@ -28,7 +28,7 @@ class StatusHelperFactory implements FactoryInterface
      * @param null|array $options
      * @return Getresourcehelper
      */
-    public function __invoke(ContainerInterface $container, $requestedName, array $options = null)
+    public function __invoke(ContainerInterface $container, $requestedName, ?array $options = null)
     {
         $class = $requestedName ? '\\' .$requestedName : StatusHelper::class;
         $Table = $container->get(StatusTable::class);
@@ -40,5 +40,4 @@ class StatusHelperFactory implements FactoryInterface
     }
 
 }
-
 

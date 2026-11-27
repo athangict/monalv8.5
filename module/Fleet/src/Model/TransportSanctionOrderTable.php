@@ -346,7 +346,7 @@ class TransportSanctionOrderTable extends AbstractTableGateway
 		}
 
 		if ($license != '-1') {
-			$select->where(array('tp.license_plate' => $license));
+			$select->where(array('so.license_plate' => $license));
 		}
 
 		$selectString = $sql->getSqlStringForSqlObject($select);
@@ -422,7 +422,7 @@ class TransportSanctionOrderTable extends AbstractTableGateway
 		}
 
 		if ($license != '-1') {
-			$select->where(array('tp.license_plate' => $license));
+			$select->where(array('so.license_plate' => $license));
 		}
 
 		$selectString = $sql->getSqlStringForSqlObject($select);

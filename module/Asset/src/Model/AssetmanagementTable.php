@@ -280,6 +280,25 @@ class AssetmanagementTable extends AbstractTableGateway
 	
 		return $column;
 	}
+
+	/**
+	 * Return latest serial rows for given asset id prefix
+	 * @param String $prefix
+	 * @return Array
+	 */
+	public function getSerial($prefix)
+	{
+		$adapter = $this->adapter;
+		$sql = new Sql($adapter);
+		$select = $sql->select();
+		$select->from($this->table);
+		$select->where->like('assetid', $prefix."%");
+
+		$selectString = $sql->getSqlStringForSqlObject($select);
+		$results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();
+
+		return $results;
+	}
 	
 	/**
 	 * Return records of given condition array
@@ -409,24 +428,35 @@ class AssetmanagementTable extends AbstractTableGateway
 	 * @param Int $id
 	 * @return Array
 	 */
-	public function getbyassettypeCu($typeid,$location,$custodian,$status,$currentdate)
+	public function getbyassettypeCu($typeid,$location,$custodian,$status,$currentdate,$region = '-1')
 	{		
 		$adapter = $this->adapter;
 		$sql = new Sql($adapter);
 		$select = $sql->select();
-		$select->from($this->table);
-		$select->where(array('putin_date < ?' => $currentdate));
+		$select->from(array('a'=>$this->table));
+		$select->where(array('a.putin_date < ?' => $currentdate));
+		if($region != '-1'){
+			$select->join(array('l'=>'adm_location'), 'l.id=a.location', array());
+			$select->where(array('l.region'=>$region));
+		}
 		if($typeid != '-1'){
-			$select->where(array('asset_type'=>$typeid));
+			$select->where(array('a.asset_type'=>$typeid));
 		}
 		if($location != '-1'){
-			$select->where(array('location'=>$location));
+			$select->where(array('a.location'=>$location));
 		}
         if($custodian != '-1'){
-			$select->where(array('custodian'=>$custodian));
+			$select->where(array('a.custodian'=>$custodian));
 		}
-		if($status != '-1'){
-			$select->where(array('status'=>$status));
+		if(is_array($status)){
+			$status = array_values(array_filter($status, function($value){
+				return $value !== '-1' && $value !== '' && $value !== null;
+			}));
+			if(!empty($status)){
+				$select->where(array('a.status'=>$status));
+			}
+		}elseif($status != '-1' && $status !== '' && $status !== null){
+			$select->where(array('a.status'=>$status));
 		}
 		$selectString = $sql->getSqlStringForSqlObject($select);
 		$results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();

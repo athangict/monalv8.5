@@ -108,7 +108,9 @@
 					/*CHECK IF THE YEAR IS LEAP AND COUNT THE LEAP IN BETWEEN*/
 					
 					$current_year=date('Y');
-					$put_in_use_year = date('Y', strtotime($row['putin_date']));
+					$putInDate = isset($row['putin_date']) ? trim((string)$row['putin_date']) : '';
+					$putInTimestamp = ($putInDate !== '') ? strtotime($putInDate) : false;
+					$put_in_use_year = ($putInTimestamp !== false) ? (int)date('Y', $putInTimestamp) : (int)$current_year;
 					$usefullife = $row['usefullife'];
 					$end_of_life = $put_in_use_year + $usefullife;
 					
@@ -126,11 +128,12 @@
 					$total_useful_days = $total_days_with_leap + $total_days_with_regular_year;
 					
 					/*TOTAL USEFULLIFE IN COMPLETED*/
-					$startDate = $row['putin_date'];
+					$startDate = $putInDate;
 					$currentDate = date("Y-m-d");
+					$daysCompletedtilltoday = 0;
 					
 					/*DAY FROM USE UNTIL TODAY*/
-					$timestampStartDate = strtotime($startDate);
+					$timestampStartDate = ($startDate !== '') ? strtotime($startDate) : false;
 					$timestampEndDate = strtotime($currentDate);
 					if ($timestampStartDate === false || $timestampEndDate === false) {
 					} else {
@@ -187,11 +190,11 @@
 						<td><?php echo $this->locationObj->getColumn($row['location'],'location');?></td>
 						<td><?php echo $row['putin_date'];?></td> 
 						<td><?php echo $row['usefullife'];?></td> 
-						<td class="fw-bold"><?php echo number_format($row['asset_value'],2);?></td>
-						<td class="fw-bold"><?php echo number_format($row['salvage'],2);?></td>
-						<td class="fw-bold"><?php echo number_format($depreciable,2);?></td>
-						<td class="fw-bold"><?php echo $acc_depreciation=number_format($row['acc_depreciation'],2)?number_format($row['acc_depreciation'],2):'0.00';?></td>
-						<td class="fw-bold"><?php echo number_format($net_value,2);?></td>
+						<td class="fw-bold"><?php echo number_format(isset($row['asset_value']) ? (float)$row['asset_value'] : 0, 2);?></td>
+						<td class="fw-bold"><?php echo number_format(isset($row['salvage']) ? (float)$row['salvage'] : 0, 2);?></td>
+						<td class="fw-bold"><?php echo number_format((float)$depreciable,2);?></td>
+						<td class="fw-bold"><?php echo number_format(isset($row['acc_depreciation']) ? (float)$row['acc_depreciation'] : 0, 2);?></td>
+						<td class="fw-bold"><?php echo number_format((float)$net_value,2);?></td>
 						<td class="fw-bold"><?php echo $this->status($row['status']);?></td>
 					 <?php if($this->button(1)!=""):?>
 							<td><?php echo ($row['status']==1)?$this->button(1, $row['id']):'';?></td>

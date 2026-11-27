@@ -404,7 +404,7 @@ class VehicleRepairMaintaneseDtlsTable extends AbstractTableGateway
 		}
 
 		if ($license != '-1') {
-			$select->where(array('tp.license_plate' => $license));
+			$select->where(array('rmd.license_plate' => $license));
 		}
 
 		$selectString = $sql->getSqlStringForSqlObject($select);
@@ -440,7 +440,7 @@ class VehicleRepairMaintaneseDtlsTable extends AbstractTableGateway
 			$select1->where(['rmd.location' => $location]);
 		}
 		if ($license != '-1') {
-			$select1->where(['tp.license_plate' => $license]);
+			$select1->where(['rmd.license_plate' => $license]);
 		}
 
 		// --- Query 2: From tp_sanction_order ---
@@ -463,7 +463,7 @@ class VehicleRepairMaintaneseDtlsTable extends AbstractTableGateway
 			$select2->where(['so.location' => $location]);
 		}
 		if ($license != '-1') {
-			$select2->where(['tp.license_plate' => $license]);
+			$select2->where(['so.license_plate' => $license]);
 		}
 
 		// --- Combine with UNION and wrap in new SELECT to get DISTINCT ---
@@ -525,7 +525,7 @@ class VehicleRepairMaintaneseDtlsTable extends AbstractTableGateway
 		}
 
 		if ($license != '-1') {
-			$select->where(array('tp.license_plate' => $license));
+			$select->where(array('rmd.license_plate' => $license));
 		}
 
 		$selectString = $sql->getSqlStringForSqlObject($select);
@@ -567,7 +567,7 @@ class VehicleRepairMaintaneseDtlsTable extends AbstractTableGateway
 		}
 
 		if ($license != '-1') {
-			$select->where(array('tp.license_plate' => $license));
+			$select->where(array('rmd.license_plate' => $license));
 		}
 
 		$selectString = $sql->getSqlStringForSqlObject($select);

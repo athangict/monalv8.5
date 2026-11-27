@@ -192,7 +192,7 @@ class DepreciationTable extends AbstractTableGateway
 		$adapter = $this->adapter;
 		$sql = new Sql($adapter);
 		$select = $sql->select();
-		$select->from($this->table, array('month', 'year'));
+		$select->from($this->table);
 		$select->order(array('month DESC', 'year DESC'));
 		if($year != '-1'):
 			$select->where(array('year' => $year,'month'=>$month));

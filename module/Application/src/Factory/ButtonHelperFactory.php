@@ -33,7 +33,7 @@ class ButtonHelperFactory implements FactoryInterface
      * @param null|array $options
      * @return Getresourcehelper
      */
-    public function __invoke(ContainerInterface $container, $requestedName, array $options = null)
+    public function __invoke(ContainerInterface $container, $requestedName, ?array $options = null)
     {
         $class = $requestedName ? $requestedName : GetresourceHelper::class;
         $aclTable = $container->get(AclTable::class);
@@ -45,5 +45,4 @@ class ButtonHelperFactory implements FactoryInterface
     }
 
 }
-
 

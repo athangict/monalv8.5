@@ -502,7 +502,9 @@ public function getEmployeeDed($column, $data1, $where = NULL)
     $select->columns(array(
         'location' => new Expression('DISTINCT('.$column.')'),
         'amount' => new Expression('SUM(pd.amount)'),
-    ))->group(array('em.location', 'pht.head_type'));
+        'payhead_type_id' => new Expression('pht.id'),
+        'head_type' => new Expression('pht.head_type'),
+    ))->group(array('em.location', 'pht.id', 'pht.head_type'));
 
     if ($where != NULL) {
         $select->where($where);
@@ -510,12 +512,13 @@ public function getEmployeeDed($column, $data1, $where = NULL)
 
     $select->where(array('pr.year' => $data1['year']));
     $select->where(array('pr.month' => $data1['month']));
+    $select->where->expression('pht.deduction = ?', array(1));
 
      $selectString = $sql->getSqlStringForSqlObject($select);
 	 //echo  $selectString;exit;
     $results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();
 
-    return $results;
+    return array_values(array_filter($results, array($this, 'isRentPayheadType')));
 }
 /*Get list of payhead deduction location wise except house rent*/
 public function getDistinctDeduction($column, $data1, $where = NULL)
@@ -532,6 +535,7 @@ public function getDistinctDeduction($column, $data1, $where = NULL)
     $select->columns(array(
         'id' => new Expression('DISTINCT('.$column.')'),
         'amount' => new Expression('SUM(pd.amount)'),
+        'head_type' => new Expression('pht.head_type'),
     ))->group(array('pht.head_type'));
 
     if ($where != NULL) {
@@ -540,12 +544,19 @@ public function getDistinctDeduction($column, $data1, $where = NULL)
 
     $select->where(array('pr.year' => $data1['year']));
     $select->where(array('pr.month' => $data1['month']));
-	$select->where->notIn('pht.id', [30]);
      $selectString = $sql->getSqlStringForSqlObject($select);
 	 //echo $selectString;exit;
     $results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();
 
-    return $results;
+    return array_values(array_filter($results, function ($result) {
+        return !$this->isRentPayheadType($result);
+    }));
+}
+
+private function isRentPayheadType(array $payheadType)
+{
+    return isset($payheadType['head_type'])
+        && preg_match('/\brent\b/i', (string) $payheadType['head_type']) === 1;
 }
 
 }

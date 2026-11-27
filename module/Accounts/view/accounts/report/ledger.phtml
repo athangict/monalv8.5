@@ -421,6 +421,44 @@ $(function(){
 	});
 	var title_table = $('#loc').val()+', '+$('#act').val()+', '+$('#heads').val()+' and '+$('#sub_heads').val()+' from '+$('input#st_date').val()+' to '+$('input#ed_date').val();
 	$('#dataTables').DataTable({
+		buttons: [
+			{
+				extend: 'copy',
+				messageBottom: "Exported on "+new Date($.now()),
+				exportOptions: {columns: ':visible'},
+				text: '<i class="ace-icon fa fa-clone"></i> Copy',
+				titleAttr: 'Copy'
+			},
+			{
+				extend: 'csv',
+				exportOptions: {columns: ':visible'},
+				text: '<i class="ace-icon fa fa-file-text-o"></i> Csv',
+				titleAttr: 'CSV'
+			},
+			{
+				extend: 'excel',
+				messageBottom: "Exported on "+new Date($.now()),
+				exportOptions: {columns: ':visible'},
+				text: '<i class="ace-icon fa fa-file-excel-o"></i> Excel',
+				titleAttr: 'Excel'
+			},
+			{
+				extend: 'pdfHtml5',
+				messageBottom: "Exported on "+new Date($.now()),
+				exportOptions: {columns: ':visible'},
+				orientation: 'landscape',
+				pageSize: 'LEGAL',
+				text: '<i class="ace-icon fa fa-file-pdf-o"></i> Pdf',
+				titleAttr: 'PDF'
+			},
+			{
+				extend: 'print',
+				messageBottom: "Exported on "+new Date($.now()),
+				exportOptions: {columns: ':visible'},
+				text: '<i class="ace-icon fa fa-print"></i> Print',
+				titleAttr: 'Print'
+			},
+		],
 		"paging":   true,
 	});
 });

@@ -39,10 +39,11 @@
 									</tr>
 										<tr>
 										<?php foreach($purchase as $row):?>
+										<?php $isAssetRow = ((int)$row['item_class'] === 33) || ((int)$row['item_class'] <= 0 && (int)$row['item'] <= 0 && !empty($row['item_name'])); ?>
 										<td class="col-lg-2 ">
 											<div class="form-group">
-												<?php if($row['item_class']==33):?>
-													<input class="form-control" name="item[]" id="item" data-placeholder="Select" value="<?php echo $row['item_name'];?>">
+												<?php if($isAssetRow):?>
+													<input class="form-control" name="item[]" id="item" data-placeholder="Select" value="<?php echo $row['item_name'];?>" readonly>
 												<?php else:?>
 												<select class="form-control" name="item[]" id="item" data-placeholder="Select"  readonly>
 													<option value="<?php echo $row['item'];?>">
@@ -83,7 +84,7 @@
 							</table>
 						</div>
 						<div class="row">
-							<div class="col-lg-6"></div>
+							<div class="col-lg-9"></div>
 							<div class="col-lg-3">
 								<div class="form-group">
 									<label for="total">Total</label>

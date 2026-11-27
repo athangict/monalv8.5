@@ -123,13 +123,16 @@ class AreportController extends AbstractActionController
 			$location = $form['location'];
 			$region = $form['region'];
 			$custodian = $form['custodian'];
-			$status = $form['status'];
+			$status = isset($form['status']) ? $form['status'] : array('1');
+			if (is_array($status) && empty($status)) {
+				$status = array('1');
+			}
 			$current_date = $form['end_date'];
 		}else{
 			$typeid = '1';
 			$location='-1';
 			$region='-1';
-			$status='-1';
+			$status=array('1');
 			$custodian = '-1';
 			$current_date   = date('Y-m-d');
 		}	
@@ -141,7 +144,7 @@ class AreportController extends AbstractActionController
 			'custodian' => $custodian,	
 			'current_date'  => $current_date,
 		);
-		$assetmgtTable = $this->getDefinedTable(Asset\AssetmanagementTable::class)->getbyassettypeCu($data['typeid'],$data['location'],$data['custodian'],$data['status'],$data['current_date']);
+		$assetmgtTable = $this->getDefinedTable(Asset\AssetmanagementTable::class)->getbyassettypeCu($data['typeid'],$data['location'],$data['custodian'],$data['status'],$data['current_date'],$data['region']);
 		return new ViewModel(array(
 			'title'        => 'Assests Management',
 			'assetmgtTable'    => $assetmgtTable,

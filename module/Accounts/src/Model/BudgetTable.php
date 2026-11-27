@@ -54,88 +54,31 @@ class BudgetTable extends AbstractTableGateway
 	 * Total sum in Class
 	 * @return Array
 	 */
-	public function getsumbyclass($classid,$year,$location,$region,$column)
-	{  
-	    $adapter = $this->adapter;
-	    $sql = new Sql($adapter);
-	    $select = $sql->select();
-	    $select->from(array("bt" => $this->table))
-	    	   ->join(array("h"=>"fa_head"),"h.id=bt.head", array("head"=>"code","head_id" => "id"))
-			   ->join(array("g"=>"fa_group"),"g.id=h.group", array("group"=>"code","group_id" => "id"))
-			   ->join(array("c"=>"fa_class"),"c.id=g.class", array("class"=>"code","class_id" => "id"))
-			   ->join(array("lc"=>"adm_location"),"lc.id=bt.location", array("locations"=>"location","location_id" => "id"))
-			   ->join(array("rg"=>"adm_region"),"rg.id=lc.region", array("regions"=>"region","region_id" => "id"));
-		$select->columns(array( new Expression('SUM('.$column.') as totalofclass')))
-		       ->where(array("c.id" => $classid));
-		 if($region != '-1'){
-			$select->where(array('rg.id'=>$region));
-		}
-		if($location != '-1'){
-			$select->where(array('lc.id'=>$location));
-		}
-	    $selectString = $sql->getSqlStringForSqlObject($select);
-		//echo $selectString;exit; 
-	    $results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();
-	    return $results;
+	public function getsumbyclass($classid,$year,$month,$location,$region)
+	{
+		return $this->getMonthlyBudgetSum('class', $classid, $year, $month, $location, $region);
 	}
 	/**
 	 * Total Sum In Group
 	 * @return Array
 	 */
-	public function getsumbygroup($groupid,$year,$location,$region,$column)
-	{  
-	    $adapter = $this->adapter;
-	    $sql = new Sql($adapter);
-	    $select = $sql->select();
-	    $select->from(array("bt" => $this->table))
-	    	   ->join(array("h"=>"fa_head"),"h.id=bt.head", array("head"=>"code","head_id" => "id"))
-			   ->join(array("g"=>"fa_group"),"g.id=h.group", array("group"=>"code","group_id" => "id"))
-			   ->join(array("lc"=>"adm_location"),"lc.id=bt.location", array("locations"=>"location","location_id" => "id"))
-			   ->join(array("rg"=>"adm_region"),"rg.id=lc.region", array("regions"=>"region","region_id" => "id"));
-		$select->columns(array( new Expression('SUM('.$column.') as totalofgroup')))
-		       ->where(array("g.id" => $groupid));
-        if($region != '-1'){
-			$select->where(array('rg.id'=>$region));
-		}	   
-	    if($location != '-1'){
-			$select->where(array('lc.id'=>$location));
-		}
-	    $selectString = $sql->getSqlStringForSqlObject($select);
-		//echo $selectString;exit;
-	    $results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();
-	    return $results;
+	public function getsumbygroup($groupid,$year,$month,$location,$region)
+	{
+		return $this->getMonthlyBudgetSum('group', $groupid, $year, $month, $location, $region);
 	}
 	/**
 	 * Get Sum in Head(Sum of all subhead amount under particular head)
 	 * @param Int $id
 	 * @return Array
 	 */
-	public function getsumbyhead($head,$year,$location,$region,$column)
+	public function getsumbyheadtype($headtype,$year,$month,$location,$region)
 	{
-		$adapter = $this->adapter;
-		$sql = new Sql($adapter);
-		$select = $sql->select();
-		$select->from(array("bt" => $this->table)) 
-		       ->join(array("lc"=>"adm_location"),"lc.id=bt.location", array("locations"=>"location","location_id" => "id"))
-			   ->join(array("rg"=>"adm_region"),"rg.id=lc.region", array("regions"=>"region","region_id" => "id"));
-	    $select->columns(array( new Expression('SUM('.$column.') as totalofhead')))
-		       ->where(array("bt.head" => $head));
-		if($region != '-1'){
-			$select->where(array('rg.id'=>$region));
-		} 
-		if($year != '-1'){
-			$select->where(array('year'=>$year));
-		} 
-		if($location != '-1'){
-			$select->where(array('lc.location'=>$location));
-		}  	
-	    if($head != '-1'){
-			$select->where(array('bt.head'=>$head));
-		} 
-		$selectString = $sql->getSqlStringForSqlObject($select);
-	    //echo $selectString;exit;
-		$results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();
-		return $results;
+		return $this->getMonthlyBudgetSum('headtype', $headtype, $year, $month, $location, $region);
+	}
+
+	public function getsumbyhead($head,$year,$month,$location,$region)
+	{
+		return $this->getMonthlyBudgetSum('head', $head, $year, $month, $location, $region);
 	}
 	/**
 	 * Get Subhead Based Amount
@@ -143,31 +86,75 @@ class BudgetTable extends AbstractTableGateway
 	 * @param Int $id
 	 * @return Array
 	 */
-	public function getsubheadbased($subhead,$year,$location,$region)
+	public function getsubheadbased($subhead,$year,$location,$month,$region)
 	{
+		$results = $this->getMonthlyBudgetSum('subhead', $subhead, $year, $month, $location, $region);
+		return array(array('budget_dr' => $results['totalofsubhead']));
+	}
+
+	private function getMonthlyBudgetSum($level, $id, $year, $month, $location, $region)
+	{
+		$monthColumns = array(
+			1 => 'january',
+			2 => 'february',
+			3 => 'march',
+			4 => 'april',
+			5 => 'may',
+			6 => 'june',
+			7 => 'july',
+			8 => 'august',
+			9 => 'september',
+			10 => 'october',
+			11 => 'november',
+			12 => 'december',
+		);
+		$month = (int)$month;
+		if (!isset($monthColumns[$month])) {
+			throw new \InvalidArgumentException('Budget month must be between 1 and 12.');
+		}
+
 		$adapter = $this->adapter;
 		$sql = new Sql($adapter);
 		$select = $sql->select();
-		$select->from(array("bt" => $this->table)) 
-		       ->join(array("lc"=>"adm_location"),"lc.id=bt.location", array("locations"=>"location","location_id" => "id"))
-			   ->join(array("rg"=>"adm_region"),"rg.id=lc.region", array("regions"=>"region","region_id" => "id"));
-		if($region != '-1'){
-			$select->where(array('rg.id'=>$region));
-		} 
-		if($year != '-1'){
-			$select->where(array('year'=>$year));
+		$select->from(array('bt' => $this->table))
+			->join(array('h' => 'fa_head'), 'h.id=bt.head', array())
+			->join(array('lc' => 'adm_location'), 'lc.id=bt.location', array())
+			->join(array('rg' => 'adm_region'), 'rg.id=lc.region', array());
+
+		$levelColumns = array(
+			'class' => 'c.id',
+			'group' => 'g.id',
+			'headtype' => 'h.head_type',
+			'head' => 'h.id',
+			'subhead' => 'bt.sub_head',
+		);
+		if (!isset($levelColumns[$level])) {
+			throw new \InvalidArgumentException('Invalid budget hierarchy level.');
 		}
-		if($location != '-1'){
-			$select->where(array('lc.location'=>$location));
-		}  	
-	    if($subhead != '-1'){
-			$select->where(array('sub_head'=>$subhead));
-		} 
-		
+		if ($level === 'class' || $level === 'group') {
+			$select->join(array('g' => 'fa_group'), 'g.id=h.group', array());
+		}
+		if ($level === 'class') {
+			$select->join(array('c' => 'fa_class'), 'c.id=g.class', array());
+		}
+
+		$totalColumn = 'totalof' . $level;
+		$select->columns(array(
+			$totalColumn => new Expression('COALESCE(SUM(bt.' . $monthColumns[$month] . '), 0)'),
+		))->where(array(
+			'bt.year' => $year,
+			$levelColumns[$level] => $id,
+		));
+		if ($region != '-1') {
+			$select->where(array('rg.id' => $region));
+		}
+		if ($location != '-1') {
+			$select->where(array('lc.id' => $location));
+		}
+
 		$selectString = $sql->getSqlStringForSqlObject($select);
-	    //echo $selectString;exit;
 		$results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();
-		return $results;
+		return isset($results[0]) ? $results[0] : array($totalColumn => 0);
 	}
 	/**
      * Return column value of given where condition | id
@@ -352,4 +339,3 @@ class BudgetTable extends AbstractTableGateway
 	}
 	
 }
-

@@ -119,19 +119,21 @@ class ReportController extends AbstractActionController
 			'start_date' => $start_date,
 			'end_date'  => $end_date,
 		);
+		$scope = $this->resolveReportScope($region, $location, $activity);
+		$activity = $scope['activity'];
+		$region = $scope['region'];
+		$location = $scope['location'];
+		$regions = $scope['regions'];
+		$locations = $scope['locations'];
+		$data['activity'] = $activity;
+		$data['region'] = $region;
+		$data['location'] = $location;
 		$appSettings = $this->getDefinedTable(Administration\AppSettingTable::class)->getSettings();
 		$incomeTaxRate = isset($appSettings['income_tax_rate']) ? (float)$appSettings['income_tax_rate'] : 30.0;
 		$includeComprehensiveInNet = !empty($appSettings['include_oci_in_net']);
 		$existingPeriodSnapshot = $this->getDefinedTable(Accounts\PeriodsnapshotTable::class)->getByPeriod($end_date, $region, $location);
 		$hasExistingCloseSnapshot = !empty($existingPeriodSnapshot);
 		$canForceReclose = $this->hasPrivilegedMonthlyCloseRole();
-		$role=explode(",", (string) ($this->_login_role ?? ''));//Multiple Role
-		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if(in_array($this->_login_role,array(100,99,8,6,2,17,5,7))):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;
 		$ViewModel = new ViewModel(array(
 			'classObj' => $this->getDefinedTable(Accounts\ClassTable::class),
 			'groupObj' => $this->getDefinedTable(Accounts\GroupTable::class),
@@ -141,9 +143,12 @@ class ReportController extends AbstractActionController
 			'transactiondetailObj' => $this->getDefinedTable(Accounts\TransactiondetailTable::class),
 			'data' => $data,
 			'region' => $regions,
+			'locations' => $locations,
 			'activityObj' => $this->getDefinedTable(Administration\ActivityTable::class),
 			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
 			'regionObj' => $this->getDefinedTable(Administration\RegionTable::class),
+			'allowAllRegion' => $scope['allow_all_region'],
+			'allowAllLocation' => $scope['allow_all_location'],
 			'userID' => $this->_author,
 		));
 		return $ViewModel;
@@ -175,17 +180,19 @@ class ReportController extends AbstractActionController
 			'start_date' => $start_date,
 			'end_date'  => $end_date,
 		);
+		$scope = $this->resolveReportScope($region, $location, $activity);
+		$activity = $scope['activity'];
+		$region = $scope['region'];
+		$location = $scope['location'];
+		$regions = $scope['regions'];
+		$locations = $scope['locations'];
+		$data['activity'] = $activity;
+		$data['region'] = $region;
+		$data['location'] = $location;
 		$pre_starting_date = date('Y-m-d', strtotime('-1 year', strtotime($start_date)));
 		$pre_ending_date = date('Y-m-d', strtotime('-1 year', strtotime($end_date)));
 		$retainedCurrent = $this->getRetainedEarningsValue($activity, $region, $location, $start_date, $end_date);
 		$retainedPrevious = $this->getRetainedEarningsValue($activity, $region, $location, $pre_starting_date, $pre_ending_date);
-		$role=explode(",", (string) ($this->_login_role ?? ''));//Multiple Role
-		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if(in_array($this->_login_role,array(100,99,8,6,2,17,5,7))):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;
 		$ViewModel = new ViewModel(array(
 			'classObj' => $this->getDefinedTable(Accounts\ClassTable::class),
 			'groupObj' => $this->getDefinedTable(Accounts\GroupTable::class),
@@ -194,11 +201,14 @@ class ReportController extends AbstractActionController
 			'transactiondetailObj' => $this->getDefinedTable(Accounts\TransactiondetailTable::class),
 			'data' => $data,
 			'region' => $regions,
+			'locations' => $locations,
 			'minDate' => $this->getDefinedTable(Accounts\TransactionTable::class)->getMin('voucher_date'),
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
 			'activityObj' => $this->getDefinedTable(Administration\ActivityTable::class),
 			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
 			'regionObj' => $this->getDefinedTable(Administration\RegionTable::class),
+			'allowAllRegion' => $scope['allow_all_region'],
+			'allowAllLocation' => $scope['allow_all_location'],
 			'retainedCurrent' => $retainedCurrent,
 			'retainedPrevious' => $retainedPrevious,
 			'userID' => $this->_author,
@@ -208,16 +218,21 @@ class ReportController extends AbstractActionController
     /**PROFIT LOSS ACTION-------------------------------------------------------------------------------------------------------------*/
 	public function profitlossAction(){
 		$this->init();
+		$monthlyCloseRequested = false;
+		$forceReclose = 0;
+		$closeNote = '';
+		$periodStart = '';
+		$periodEnd = '';
 		if($this->getRequest()->isPost()):
 			$form = $this->getRequest()->getPost();
 			if(isset($form['run_monthly_close']) && (int)$form['run_monthly_close'] === 1):
+				$monthlyCloseRequested = true;
 				$region = (isset($form['region']) && $form['region'] !== '') ? (int)$form['region'] : -1;
 				$location = (isset($form['location']) && $form['location'] !== '') ? (int)$form['location'] : -1;
 				$periodStart = isset($form['period_start']) ? $form['period_start'] : date('Y-m-01');
 				$periodEnd = isset($form['period_end']) ? $form['period_end'] : date('Y-m-t');
 				$forceReclose = (isset($form['force_reclose']) && (int)$form['force_reclose'] === 1) ? 1 : 0;
 				$closeNote = isset($form['close_note']) ? trim((string)$form['close_note']) : '';
-				$this->runMonthlyCloseSnapshot($periodStart, $periodEnd, $region, $location, $forceReclose, $closeNote);
 				$tier = 4;
 				$activity = ($location > 0) ? $location : -1;
 				$start_date = $periodStart;
@@ -246,19 +261,31 @@ class ReportController extends AbstractActionController
 			'start_date' => $start_date,
 			'end_date'  => $end_date,
 		);
+		$scope = $this->resolveReportScope($region, $location, $activity);
+		$activity = $scope['activity'];
+		$region = $scope['region'];
+		$location = $scope['location'];
+		$regions = $scope['regions'];
+		$locations = $scope['locations'];
+		$data['activity'] = $activity;
+		$data['region'] = $region;
+		$data['location'] = $location;
+		$monthlyCloseAccess = $this->getMonthlyCloseAccess($region, $location);
+		$canRunMonthlyClose = $monthlyCloseAccess['allowed'];
+		$canForceReclose = ($canRunMonthlyClose && $this->hasPrivilegedMonthlyCloseRole());
+		if($monthlyCloseRequested):
+			if($canRunMonthlyClose):
+				$this->runMonthlyCloseSnapshot($periodStart, $periodEnd, $region, $location, $forceReclose, $closeNote);
+			else:
+				$reason = ($monthlyCloseAccess['reason'] !== '') ? $monthlyCloseAccess['reason'] : 'You do not have permission to run monthly close for this scope.';
+				$this->flashMessenger()->addMessage('Failed^ '.$reason);
+			endif;
+		endif;
 		$appSettings = $this->getDefinedTable(Administration\AppSettingTable::class)->getSettings();
 		$incomeTaxRate = isset($appSettings['income_tax_rate']) ? (float)$appSettings['income_tax_rate'] : 30.0;
 		$includeComprehensiveInNet = !empty($appSettings['include_oci_in_net']);
 		$existingPeriodSnapshot = $this->getDefinedTable(Accounts\PeriodsnapshotTable::class)->getByPeriod($end_date, $region, $location);
 		$hasExistingCloseSnapshot = !empty($existingPeriodSnapshot);
-		$canForceReclose = $this->hasPrivilegedMonthlyCloseRole();
-		$role=explode(",", (string) ($this->_login_role ?? ''));//Multiple Role
-		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if(in_array($this->_login_role,array(100,99,8,6,2,17,5,7))):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;
 		$ViewModel = new ViewModel(array(
 			'classObj' => $this->getDefinedTable(Accounts\ClassTable::class),
 			'groupObj' => $this->getDefinedTable(Accounts\GroupTable::class),
@@ -267,14 +294,18 @@ class ReportController extends AbstractActionController
 			'transactiondetailObj' => $this->getDefinedTable(Accounts\TransactiondetailTable::class),
 			'data' => $data,
 			'region' => $regions,
+			'locations' => $locations,
 			'minDate' => $this->getDefinedTable(Accounts\TransactionTable::class)->getMin('voucher_date'),
 			'activityObj' => $this->getDefinedTable(Administration\ActivityTable::class),
 			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
 			'regionObj' => $this->getDefinedTable(Administration\RegionTable::class),
+			'canRunMonthlyClose' => $canRunMonthlyClose,
 			'canForceReclose' => $canForceReclose,
 			'hasExistingCloseSnapshot' => $hasExistingCloseSnapshot,
 			'incomeTaxRate' => $incomeTaxRate,
 			'includeComprehensiveInNet' => $includeComprehensiveInNet,
+			'allowAllRegion' => $scope['allow_all_region'],
+			'allowAllLocation' => $scope['allow_all_location'],
 			'userID' => $this->_author,
 		));
 		return $ViewModel;
@@ -330,9 +361,9 @@ class ReportController extends AbstractActionController
 		$lc='';
 		$form = $this->getRequest()->getPost();
 		$location_id = $form['location'];
-		$cashaccount = $this->getDefinedTable(Accounts\CashaccountTable::class)->getca(array('location' => $location_id));
+		$cashaccount = $this->getDefinedTable(Accounts\CashaccountTable::class)->getca($location_id);
 		
-		$lc.="<option value='-1'>All</option>";
+		$lc.="<option value=''></option><option value='-1'>All</option>";
 		foreach($cashaccount as $ca):
 			$lc.= "<option value='".$ca['id']."'>".$ca['cash_account_code'].'-'.$ca['cash_account_name']."</option>";
 		endforeach;
@@ -347,11 +378,13 @@ class ReportController extends AbstractActionController
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getPost();
 			$location = $form['location'];
+			$cashaccount = isset($form['cashaccount']) ? $form['cashaccount'] : '';
 			$start_date = $form['start_date'];
 			$end_date = $form['end_date'];
-			$cash_details = $form['cash_details'];
+			$cash_details = isset($form['cash_details']) ? $form['cash_details'] : 0;
 		}else{
 			$location = 0;
+			$cashaccount = '';
 			$start_date = date('Y-m-d');
 			$end_date  = date('Y-m-d');
 			$cash_details =0;
@@ -360,6 +393,8 @@ class ReportController extends AbstractActionController
 		return new ViewModel(array(
 			'title' => "Cash Book for -".$loc." from ".$start_date." till ".$end_date,
 			'location_id' => $location,
+			'cashaccount_id' => $cashaccount,
+			'cashAccounts' => $this->getDefinedTable(Accounts\CashaccountTable::class)->getca($location),
 			'start_date'=> $start_date,
 			'end_date' => $end_date,
 			'cash_detail' => $cash_details,
@@ -919,10 +954,11 @@ class ReportController extends AbstractActionController
 		$level = isset($form['level']) ? $form['level'] : '';
 		$parentId = isset($form['parent_id']) ? (int)$form['parent_id'] : 0;
 		$headTypeId = isset($form['head_type_id']) ? $form['head_type_id'] : '';
+		$response = $this->getResponse();
+		$response->getHeaders()->addHeaderLine('Content-Type', 'application/json');
+
 		if (!is_scalar($headTypeId) || ($headTypeId !== '' && !ctype_digit((string)$headTypeId))) {
-			$response = $this->getResponse();
 			$response->setStatusCode(400);
-			$response->getHeaders()->addHeaderLine('Content-Type', 'application/json');
 			return $response->setContent(json_encode(array('success' => 0, 'message' => 'Invalid Head Type.', 'rows' => '')));
 		}
 
@@ -934,25 +970,56 @@ class ReportController extends AbstractActionController
 			'end_date' => isset($form['end_date']) ? $form['end_date'] : date('Y-m-d'),
 			'head_type_id' => $headTypeId !== '' ? (int)$headTypeId : null,
 		);
+		$scope = $this->resolveReportScope($filters['region'], $filters['location'], $filters['activity']);
+		$filters['activity'] = $scope['activity'];
+		$filters['region'] = $scope['region'];
+		$filters['location'] = $scope['location'];
 
 		if($parentId <= 0 || empty($report) || empty($level)):
-			echo json_encode(array('success' => 0, 'rows' => ''));
-			exit;
+			$response->setStatusCode(400);
+			return $response->setContent(json_encode(array(
+				'success' => 0,
+				'message' => 'Invalid request. Missing report node context.',
+				'rows' => '',
+			)));
 		endif;
 
-		$rows = '';
-		if($level == 'headtype' && in_array($report, array('trialbalance', 'balancesheet', 'profitloss'), true)):
-			$rows = $this->buildReportHeadTypeLazyRows($report, $parentId, $filters);
-		elseif($report == 'trialbalance'):
-			$rows = $this->buildTrialBalanceLazyRows($level, $parentId, $filters);
-		elseif($report == 'balancesheet'):
-			$rows = $this->buildBalanceSheetLazyRows($level, $parentId, $filters);
-		elseif($report == 'profitloss'):
-			$rows = $this->buildProfitLossLazyRows($level, $parentId, $filters);
-		endif;
+		try {
+			$rows = '';
+			if($level == 'headtype' && in_array($report, array('trialbalance', 'balancesheet', 'profitloss'), true)):
+				$rows = $this->buildReportHeadTypeLazyRows($report, $parentId, $filters);
+			elseif($report == 'trialbalance'):
+				$rows = $this->buildTrialBalanceLazyRows($level, $parentId, $filters);
+			elseif($report == 'balancesheet'):
+				$rows = $this->buildBalanceSheetLazyRows($level, $parentId, $filters);
+			elseif($report == 'profitloss'):
+				$rows = $this->buildProfitLossLazyRows($level, $parentId, $filters);
+			endif;
 
-		echo json_encode(array('success' => 1, 'rows' => $rows));
-		exit;
+			return $response->setContent(json_encode(array('success' => 1, 'rows' => $rows)));
+		} catch (\Throwable $e) {
+			error_log(sprintf(
+				'[ReportController::fetchreportlevelAction] report=%s level=%s parent=%d region=%s location=%s activity=%s error=%s',
+				(string)$report,
+				(string)$level,
+				(int)$parentId,
+				isset($filters['region']) ? (string)$filters['region'] : '',
+				isset($filters['location']) ? (string)$filters['location'] : '',
+				isset($filters['activity']) ? (string)$filters['activity'] : '',
+				$e->getMessage()
+			));
+			$response->setStatusCode(500);
+			return $response->setContent(json_encode(array(
+				'success' => 0,
+				'message' => 'Unable to load the selected level: ' . $e->getMessage(),
+				'rows' => '',
+			)));
+		}
+	}
+
+	public function getreportlevelAction()
+	{
+		return $this->fetchreportlevelAction();
 	}
 
 	private function getReportHeads($report, $groupId, $filters)
@@ -1459,6 +1526,59 @@ class ReportController extends AbstractActionController
 		return !empty($appSettings['include_oci_in_net']);
 	}
 
+	private function resolveReportScope($region, $location, $activity = -1)
+	{
+		$region = (int)$region;
+		$location = (int)$location;
+		$activity = (int)$activity;
+		$permissionObj = $this->PermissionPlugin();
+		$regions = $permissionObj->getregion();
+		$allowedRegionIds = array();
+		foreach($regions as $regionRow):
+			if(isset($regionRow['id'])):
+				$allowedRegionIds[] = (int)$regionRow['id'];
+			endif;
+		endforeach;
+		$allowedRegionIds = array_values(array_unique($allowedRegionIds));
+		if($region > 0 && !in_array($region, $allowedRegionIds, true)):
+			$region = -1;
+		endif;
+		if($region === -1 && sizeof($allowedRegionIds) === 1):
+			$region = (int)$allowedRegionIds[0];
+		endif;
+
+		$locations = $permissionObj->getlocation(($region > 0) ? $region : 0);
+		$allowedLocationIds = array();
+		foreach($locations as $locationRow):
+			if(isset($locationRow['id'])):
+				$allowedLocationIds[] = (int)$locationRow['id'];
+			endif;
+		endforeach;
+		$allowedLocationIds = array_values(array_unique($allowedLocationIds));
+		if($location > 0 && !in_array($location, $allowedLocationIds, true)):
+			$location = -1;
+		endif;
+		if($location === -1 && sizeof($allowedLocationIds) === 1):
+			$location = (int)$allowedLocationIds[0];
+		endif;
+
+		if($location > 0):
+			$activity = $location;
+		elseif($activity > 0):
+			$activity = -1;
+		endif;
+
+		return array(
+			'activity' => $activity,
+			'region' => $region,
+			'location' => $location,
+			'regions' => $regions,
+			'locations' => $locations,
+			'allow_all_region' => (sizeof($allowedRegionIds) > 1),
+			'allow_all_location' => (sizeof($allowedLocationIds) > 1),
+		);
+	}
+
 	private function getRetainedEarningsValue($activity, $region, $location, $startDate, $endDate)
 	{
 		$periodSnapshot = $this->getDefinedTable(Accounts\PeriodsnapshotTable::class)->getByPeriod($endDate, $region, $location);
@@ -1481,36 +1601,213 @@ class ReportController extends AbstractActionController
 		return $openingRetained + $periodNetProfit;
 	}
 
-	private function hasPrivilegedMonthlyCloseRole()
+	private function getCurrentRoleIds()
 	{
-		$privilegedRoles = array('100','99');
-		$roles = explode(',', (string)$this->_login_role);
-		foreach($roles as $role):
-			if(in_array(trim($role), $privilegedRoles, true)):
-				return true;
+		$roles = array();
+		foreach (explode(',', (string)$this->_login_role) as $role) {
+			$role = trim($role);
+			if (ctype_digit($role) && (int)$role > 0) {
+				$roles[] = (int)$role;
+			}
+		}
+		if (empty($roles) && ctype_digit((string)$this->_login_role) && (int)$this->_login_role > 0) {
+			$roles[] = (int)$this->_login_role;
+		}
+		return array_values(array_unique($roles));
+	}
+
+	private function getIdentityIdList($field)
+	{
+		$rawValue = '';
+		if (in_array($field, array('admin_location', 'admin_activity'), true)) {
+			$rawValue = (string)$this->getDefinedTable(Administration\UsersTable::class)->getColumn((int)$this->_login_id, $field);
+		}
+		if ($rawValue === '') {
+			$identity = $this->identity();
+			if ($identity && isset($identity->{$field})) {
+				$rawValue = (string)$identity->{$field};
+			}
+		}
+
+		$ids = array();
+		foreach (explode(',', $rawValue) as $value) {
+			$value = trim($value);
+			if (ctype_digit($value) && (int)$value > 0) {
+				$ids[] = (int)$value;
+			}
+		}
+		return array_values(array_unique($ids));
+	}
+
+	private function getMonthlyCloseProcessId()
+	{
+		$processes = $this->getDefinedTable(Acl\ProcessTable::class)->getAll();
+		foreach($processes as $process):
+			$processId = isset($process['id']) ? (int)$process['id'] : 0;
+			if($processId <= 0):
+				continue;
+			endif;
+			$name = strtolower(trim((string)($process['process'] ?? '')));
+			$description = strtolower(trim((string)($process['description'] ?? '')));
+			$tableName = strtolower(trim((string)($process['table_name'] ?? '')));
+			if(
+				$tableName === 'fa_period_snapshot'
+				|| strpos($name, 'monthly close') !== false
+				|| strpos($description, 'monthly close') !== false
+				|| strpos($description, 'period snapshot') !== false
+			):
+				return $processId;
 			endif;
 		endforeach;
-		return in_array((string)$this->_login_role, $privilegedRoles, true);
+		return 0;
+	}
+
+	private function getMonthlyCloseAccess($region, $location)
+	{
+		$processId = $this->getMonthlyCloseProcessId();
+		if($processId <= 0):
+			return array(
+				'allowed' => false,
+				'reason' => 'Monthly close process is not configured. Please create a Functional Process for monthly close and assign role access.',
+			);
+		endif;
+
+		$currentRoles = $this->getCurrentRoleIds();
+		if(empty($currentRoles)):
+			return array(
+				'allowed' => false,
+				'reason' => 'No active role found for monthly close authorization.',
+			);
+		endif;
+
+		$rows = $this->getDefinedTable(Acl\RoleprocessTable::class)->get(array(
+			'process' => $processId,
+			'status' => 1,
+		));
+		$applicableRows = array();
+		foreach($rows as $row):
+			$rowRole = isset($row['role']) ? (int)$row['role'] : 0;
+			if(in_array($rowRole, $currentRoles, true)):
+				$applicableRows[] = $row;
+			endif;
+		endforeach;
+		if(empty($applicableRows)):
+			return array(
+				'allowed' => false,
+				'reason' => 'Your role is not mapped to the monthly close functional process.',
+			);
+		endif;
+
+		$requiresLocation = false;
+		$requiresActivity = false;
+		foreach($applicableRows as $row):
+			if(isset($row['location']) && (int)$row['location'] === 1):
+				$requiresLocation = true;
+			endif;
+			if(isset($row['activity']) && (int)$row['activity'] === 1):
+				$requiresActivity = true;
+			endif;
+		endforeach;
+
+		$location = (int)$location;
+		$region = (int)$region;
+		if(($requiresLocation || $requiresActivity) && $location <= 0):
+			return array(
+				'allowed' => false,
+				'reason' => 'Monthly close for your role requires a specific location scope.',
+			);
+		endif;
+
+		if($location > 0):
+			$allowedLocations = $this->getIdentityIdList('admin_location');
+			if(!empty($allowedLocations) && !in_array($location, $allowedLocations, true)):
+				return array(
+					'allowed' => false,
+					'reason' => 'Selected location is outside your permitted scope.',
+				);
+			endif;
+		endif;
+
+		if($region > 0):
+			$allowedRegionIds = array();
+			foreach($this->PermissionPlugin()->getregion() as $regionRow):
+				if(isset($regionRow['id'])):
+					$allowedRegionIds[] = (int)$regionRow['id'];
+				endif;
+			endforeach;
+			$allowedRegionIds = array_values(array_unique($allowedRegionIds));
+			if(!empty($allowedRegionIds) && !in_array($region, $allowedRegionIds, true)):
+				return array(
+					'allowed' => false,
+					'reason' => 'Selected region is outside your permitted scope.',
+				);
+			endif;
+		endif;
+
+		return array(
+			'allowed' => true,
+			'reason' => '',
+		);
+	}
+
+	private function hasPrivilegedMonthlyCloseRole()
+	{
+		$access = $this->getMonthlyCloseAccess(-1, -1);
+		return !empty($access['allowed']);
 	}
 
 	private function runMonthlyCloseSnapshot($periodStart, $periodEnd, $region, $location, $forceReclose = 0, $closeNote = '')
 	{
 		$activity = ($location > 0) ? $location : -1;
 		$existingSnapshot = $this->getDefinedTable(Accounts\PeriodsnapshotTable::class)->getByPeriod($periodEnd, $region, $location);
-		$isAdmin = $this->hasPrivilegedMonthlyCloseRole();
+		$closeAccess = $this->getMonthlyCloseAccess($region, $location);
+		$canRunClose = !empty($closeAccess['allowed']);
+		$canForceReclose = ($canRunClose && $this->hasPrivilegedMonthlyCloseRole());
+		$accessReason = isset($closeAccess['reason']) ? (string)$closeAccess['reason'] : '';
 
-		if(!empty($existingSnapshot) && (int)$forceReclose !== 1):
-			$this->flashMessenger()->addMessage('Failed^ This period is already closed. Use Force Re-close (admin) to recompute.');
+		if(!$canRunClose):
+			$this->flashMessenger()->addMessage('Failed^ '.($accessReason !== '' ? $accessReason : 'You do not have permission to run monthly close.'));
 			return;
 		endif;
-		if((int)$forceReclose === 1 && !$isAdmin):
+
+		if(!empty($existingSnapshot) && (int)$forceReclose !== 1):
+			$closedBy = isset($existingSnapshot['author']) ? (int)$existingSnapshot['author'] : 0;
+			$closedOn = '';
+			if(!empty($existingSnapshot['modified'])):
+				$closedOn = (string)$existingSnapshot['modified'];
+			elseif(!empty($existingSnapshot['created'])):
+				$closedOn = (string)$existingSnapshot['created'];
+			endif;
+			$lockMessage = 'This period and scope is already closed.';
+			if($closedBy > 0):
+				$lockMessage .= ' Closed by user ID '.$closedBy;
+			endif;
+			if($closedOn !== ''):
+				$lockMessage .= ' on '.$closedOn;
+			endif;
+			$lockMessage .= '. Use Force Re-close (authorized role) to recompute.';
+			$this->flashMessenger()->addMessage('Failed^ '.$lockMessage);
+			return;
+		endif;
+		if((int)$forceReclose === 1 && !$canForceReclose):
 			$this->flashMessenger()->addMessage('Failed^ You do not have permission to force re-close.');
+			return;
+		endif;
+		if((int)$forceReclose === 1 && trim((string)$closeNote) === ''):
+			$this->flashMessenger()->addMessage('Failed^ Force re-close requires a reason note.');
 			return;
 		endif;
 
 		$connection = $this->_container->get('Laminas\Db\Adapter\Adapter')->getDriver()->getConnection();
-		$connection->beginTransaction();
+		$transactionStarted = false;
 		try{
+			try{
+				$connection->beginTransaction();
+				$transactionStarted = true;
+			}catch(\Throwable $transactionException){
+				$transactionStarted = false;
+				error_log('[ReportController::runMonthlyCloseSnapshot] beginTransaction unavailable, continuing without explicit transaction: '.$transactionException->getMessage());
+			}
 			$openingRetained = 0.0;
 			$latestSnapshot = $this->getDefinedTable(Accounts\PeriodsnapshotTable::class)->getLatestBefore($periodStart, $region, $location);
 			if(!empty($latestSnapshot) && isset($latestSnapshot['retained_earnings'])):
@@ -1558,15 +1855,40 @@ class ReportController extends AbstractActionController
 					'created' => $this->_created,
 				);
 				$this->getDefinedTable(Accounts\PeriodsnapshotlogTable::class)->save($logData);
-				$connection->commit();
+				if($transactionStarted):
+					try{
+						$connection->commit();
+					}catch(\Throwable $commitException){
+						if(stripos($commitException->getMessage(), 'no active transaction') === false):
+							throw $commitException;
+						endif;
+						error_log('[ReportController::runMonthlyCloseSnapshot] commit skipped: '.$commitException->getMessage());
+					}
+					$transactionStarted = false;
+				endif;
 				$this->flashMessenger()->addMessage('success^ Monthly close snapshot saved successfully.');
 			else:
-				$connection->rollback();
+				if($transactionStarted):
+					try{
+						$connection->rollback();
+					}catch(\Throwable $rollbackException){
+						error_log('[ReportController::runMonthlyCloseSnapshot] rollback failed in save-failure path: '.$rollbackException->getMessage());
+					}
+					$transactionStarted = false;
+				endif;
 				$this->flashMessenger()->addMessage('Failed^ Failed to save monthly close snapshot.');
 			endif;
-		}catch(\Exception $e){
-			$connection->rollback();
-			throw $e;
+		}catch(\Throwable $e){
+			if($transactionStarted):
+				try{
+					$connection->rollback();
+				}catch(\Throwable $rollbackException){
+					error_log('[ReportController::runMonthlyCloseSnapshot] rollback failed: '.$rollbackException->getMessage());
+				}
+			endif;
+			error_log('[ReportController::runMonthlyCloseSnapshot] '.$e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+			$this->flashMessenger()->addMessage('Failed^ Monthly close failed: '.$e->getMessage());
+			return;
 		}
 	}
 }

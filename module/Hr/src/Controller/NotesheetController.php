@@ -411,7 +411,7 @@ class NotesheetController extends AbstractActionController
 	/**
 	 * Notification Action
 	 */
-	public function notify($leave_id,$privilege_id,$remarks = NULL,$flow_result)
+	public function notify($leave_id,$privilege_id,$remarks,$flow_result)
 	{
 		$userlists='';
 		$applications = $this->getDefinedTable(Hr\LeaveTable::class)->get($leave_id);
@@ -747,7 +747,28 @@ class NotesheetController extends AbstractActionController
 	{
 		$this->init();	
 		if($this->getRequest()->isPost()):		
-			$form = $this->getRequest()->getPost()->toArray();		
+			$form = $this->getRequest()->getPost()->toArray();
+			$selectedBankSubHead = isset($form['bank_sub_head']) && ctype_digit((string) $form['bank_sub_head'])
+				? (int) $form['bank_sub_head']
+				: 0;
+			$sittingFeeAccount = $this->getSittingFeeMappedAccount();
+			$sittingTdsAccount = $this->getSittingFeeTdsMappedAccount();
+			$bankOptions = $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.type' => 3));
+			$bankHead = 0;
+			foreach($bankOptions as $bankOption):
+				if((int) $bankOption['id'] === $selectedBankSubHead):
+					$bankHead = (int) $bankOption['head_id'];
+					break;
+				endif;
+			endforeach;
+			if($sittingFeeAccount === null || $sittingTdsAccount === null):
+				$this->flashMessenger()->addMessage("error^ Configure a unique non-deduction PayHead Type with a name containing Sitting and a Finance Sub Head mapping. Configure a unique deduction PayHead Type with code SF or a name containing Sitting and a Finance Sub Head mapping for TDS.");
+				return $this->redirect()->toRoute('notesheet', array('action' => 'viewsittingfee', 'id' => $form['sitting']));
+			endif;
+			if($selectedBankSubHead < 1 || $bankHead < 1):
+				$this->flashMessenger()->addMessage("error^ Please select a valid bank account.");
+				return $this->redirect()->toRoute('notesheet', array('action' => 'viewsittingfee', 'id' => $form['sitting']));
+			endif;
 			$this->_connection->beginTransaction(); //***Transaction begins here***//
 			   /* Send Request */
 					$data = array(
@@ -774,13 +795,7 @@ class NotesheetController extends AbstractActionController
 					$date = date('ym',strtotime(date('Y-m-d')));
 					$tmp_VCNo = $loc.'-'.$prefix.$date;
 					
-					$results = $this->getDefinedTable(Accounts\TransactionTable::class)->getSerial($tmp_VCNo);
-					
-					$pltp_no_list = array();
-					foreach($results as $result):
-						array_push($pltp_no_list, substr($result['voucher_no'], 14));
-					endforeach;
-					$next_serial = max($pltp_no_list) + 1;
+					$next_serial = $this->getDefinedTable(Accounts\TransactionTable::class)->getNextSerial($tmp_VCNo);
 						
 					switch(strlen($next_serial)){
 						case 1: $next_dc_serial = "0000".$next_serial; break;
@@ -790,7 +805,6 @@ class NotesheetController extends AbstractActionController
 						default: $next_dc_serial = $next_serial;       break;
 					}	
 					$voucher_no = $tmp_VCNo.$next_dc_serial;
-					
 							$data = array(
 								'voucher_date' 		=> $sittingfees['date'],
 								'voucher_type' 		=> 12,
@@ -829,12 +843,12 @@ class NotesheetController extends AbstractActionController
 									'voucher_dates' => $data['voucher_date'],
 									'voucher_types' => 12,
 									'location' => $location,
-									'head' =>'196',
-									'sub_head' =>'2724',
+									'head' =>$sittingFeeAccount['head'],
+									'sub_head' =>$sittingFeeAccount['sub_head'],//sitting fee expense
 									'bank_ref_type' => '',
 									'debit' =>$sittingfees['amount_ttl'],
 									'credit' =>'0.00',
-									'ref_no'=> 'Sittingfee', 
+									'ref_no'=> 'Sittingfee',
 									'type' => '1',//user inputted  data  
 									'status' => 3, // status appied
 									'activity'=>$location,
@@ -849,12 +863,12 @@ class NotesheetController extends AbstractActionController
 									'voucher_dates' => $data['voucher_date'],
 									'voucher_types' => 12,
 									'location' => $location,
-									'head' =>'150',
-									'sub_head' =>'2723',
+									'head' =>$sittingTdsAccount['head'],
+									'sub_head' =>$sittingTdsAccount['sub_head'], //sitting fee deduction TDS
 									'bank_ref_type' => '',
 									'debit' =>'0.00',
 									'credit' =>$sittingfees['deduction_ttl'],
-									'ref_no'=> 'Sittingfee', 
+									'ref_no'=> 'Sitting Fee.' . date('m.Y', strtotime($data['voucher_date'])),
 									'type' => '1',//user inputted  data
 									'status' => 3, // status applied
 									'activity'=>$data['voucher_amount'],
@@ -869,12 +883,12 @@ class NotesheetController extends AbstractActionController
 									'voucher_dates' => $data['voucher_date'],
 									'voucher_types' => 12,
 									'location' => $location,
-									'head' =>'36',
-									'sub_head' =>'172',
+									'head' =>$bankHead,
+									'sub_head' =>$selectedBankSubHead,//bank account
 									'bank_ref_type' => '',
 									'credit' =>$sittingfees['payment_amount_ttl'],
 									'debit' =>'0.00',
-									'ref_no'=> 'Sittingfee' , 
+									'ref_no'=> '',
 									'type' => '1',//user inputted  data
 									'status' => 3, // status applied
 									'activity'=>$data['voucher_amount'],
@@ -932,7 +946,10 @@ class NotesheetController extends AbstractActionController
 		$login = array(
 			'login_id'      => $this->_login_id,
 			'login_role'    => $this->_login_role,
-		); 		
+		);
+		$bankOptions = $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.type' => 3));
+		$sittingFeeAccount = $this->getSittingFeeMappedAccount();
+		$sittingTdsAccount = $this->getSittingFeeTdsMappedAccount();
 		$viewModel = new ViewModel(array(			
 			'title' => 'Sitting Fee Application',
 			'flow_id'            => $this->_id,
@@ -947,14 +964,75 @@ class NotesheetController extends AbstractActionController
 			'focalsObj' 		 => $this->getDefinedTable(Administration\UsersTable::class),
 			'employeeObj'        => $this->getDefinedTable(Hr\EmployeeTable::class), 
 			'departmentObj'        => $this->getDefinedTable(Administration\ActivityTable::class),    
+			'bankOptions'         => $bankOptions,
+			'sittingFeeAccount' => $sittingFeeAccount,
+			'sittingTdsAccount' => $sittingTdsAccount,
 		));
 		$viewModel->setTerminal(True);
 		return $viewModel;
 	}
+	private function getSittingFeeMappedAccount()
+	{
+		$matches = array();
+		$payheadTypes = $this->getDefinedTable(Hr\PayheadtypeTable::class)->getAll();
+		foreach($payheadTypes as $payheadType):
+			$nameMatches = isset($payheadType['head_type']) && stripos((string) $payheadType['head_type'], 'sitting') !== false;
+			if(isset($payheadType['deduction']) && (int) $payheadType['deduction'] === 0 && $nameMatches):
+				$matches[] = $payheadType;
+			endif;
+		endforeach;
+
+		if(count($matches) !== 1):
+			return null;
+		endif;
+
+		return $this->getPayheadTypeMappedAccount($matches[0]['id']);
+	}
+
+	private function getSittingFeeTdsMappedAccount()
+	{
+		$matches = array();
+		$payheadTypes = $this->getDefinedTable(Hr\PayheadtypeTable::class)->getAll();
+		foreach($payheadTypes as $payheadType):
+			$nameMatches = isset($payheadType['head_type'])
+				&& Hr\PayheadtypeTable::isSalaryTaxOrTdsName($payheadType['head_type']);
+			if(isset($payheadType['deduction']) && (int) $payheadType['deduction'] === 1 && $nameMatches):
+				$matches[] = $payheadType;
+			endif;
+		endforeach;
+
+		if(count($matches) !== 1):
+			return null;
+		endif;
+
+		return $this->getPayheadTypeMappedAccount($matches[0]['id']);
+	}
+
+	private function getPayheadTypeMappedAccount($payheadTypeId)
+	{
+		$payheadTypeTable = $this->getDefinedTable(Hr\PayheadtypeTable::class);
+		$subHeadId = $payheadTypeTable->getFinanceSubheadId($payheadTypeId);
+		if(!is_scalar($subHeadId) || (int) $subHeadId < 1):
+			return null;
+		endif;
+
+		$subHeads = $this->getDefinedTable(Accounts\SubheadTable::class)->get(array(
+			'sh.id' => (int) $subHeadId,
+			'sh.type' => 5,
+		));
+		if(count($subHeads) !== 1 || (int) $subHeads[0]['head_id'] < 1):
+			return null;
+		endif;
+
+		return array(
+			'head' => (int) $subHeads[0]['head_id'],
+			'sub_head' => (int) $subHeads[0]['id'],
+		);
+	}
 	/**
 	 * Notification Action
 	 */
-	public function notifyforencash($leave_id,$privilege_id,$remarks = NULL,$flow_result)
+	public function notifyforencash($leave_id,$privilege_id,$remarks,$flow_result)
 	{
 		$userlists='';
 		$applications = $this->getDefinedTable(Hr\LeaveEncashTable::class)->get($leave_id);
@@ -1021,6 +1099,3 @@ class NotesheetController extends AbstractActionController
 	}
 	
 }
-
-
-

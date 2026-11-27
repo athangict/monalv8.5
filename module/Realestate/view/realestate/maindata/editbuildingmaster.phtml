@@ -8,6 +8,11 @@
 	foreach($datas as $row):
 		extract($row);
 	endforeach;
+	$generate_rent = isset($rentConfig['generate_rent']) ? (int)$rentConfig['generate_rent'] : 0;
+	$rent_block = isset($rentConfig['rent_block']) ? (int)$rentConfig['rent_block'] : 0;
+	$rent_asset = isset($rentConfig['rent_asset']) ? (int)$rentConfig['rent_asset'] : 0;
+	$rent_head = isset($rentConfig['rent_head']) ? (int)$rentConfig['rent_head'] : 0;
+	$rent_sub_head = isset($rentConfig['rent_sub_head']) ? (int)$rentConfig['rent_sub_head'] : 0;
 ?>
 <div class="space-12"></div>
 <div class="row">
@@ -102,6 +107,49 @@
 									<input class="form-control span2" name="putin_date" id="putin_date" type="text" placeholder="putin_date" value="<?php echo $putin_date?>"required>
 									<span class="input-group-addon add-on"><i class="fa fa-calendar"></i></span>
 								</div>
+							</div>
+							<div class="form-group col-lg-3">
+								<label for="generate_rent" class="control-label">Generate Rent?</label>
+								<select class="form-control" id="generate_rent" name="generate_rent">
+									<option value="0" <?php echo ($generate_rent !== 1) ? 'selected' : ''; ?>>No</option>
+									<option value="1" <?php echo ($generate_rent === 1) ? 'selected' : ''; ?>>Yes</option>
+								</select>
+							</div>
+							<div class="form-group col-lg-3">
+								<label for="rent_block" class="control-label">Block</label>
+								<select class="form-control" id="rent_block" name="rent_block">
+									<option value=""></option>
+									<?php foreach ($assettypes as $asttype): ?>
+										<option value="<?php echo $asttype['id'];?>" <?php echo ($rent_block === (int)$asttype['id']) ? 'selected' : ''; ?>><?php echo $asttype['name'];?></option>
+									<?php endforeach;?>
+								</select>
+							</div>
+							<div class="form-group col-lg-3">
+								<label for="rent_asset" class="control-label">Asset</label>
+								<select class="form-control" id="rent_asset" name="rent_asset">
+									<option value=""></option>
+									<?php foreach($rentAssets as $asset): ?>
+										<option value="<?php echo $asset['id'];?>" <?php echo ($rent_asset === (int)$asset['id']) ? 'selected' : ''; ?>><?php echo $asset['name'];?></option>
+									<?php endforeach;?>
+								</select>
+							</div>
+							<div class="form-group col-lg-3 rent-accounting-config">
+								<label for="rent_head" class="control-label">Head</label>
+								<select class="form-control" id="rent_head" name="rent_head">
+									<option value=""></option>
+									<?php foreach ($heads as $head): ?>
+										<option value="<?php echo $head['id'];?>" <?php echo ($rent_head === (int)$head['id']) ? 'selected' : ''; ?>><?php echo $head['code'].' - '.$head['name'];?></option>
+									<?php endforeach;?>
+								</select>
+							</div>
+							<div class="form-group col-lg-3 rent-accounting-config">
+								<label for="rent_sub_head" class="control-label">Sub Head</label>
+								<select class="form-control" id="rent_sub_head" name="rent_sub_head">
+									<option value=""></option>
+									<?php foreach($rentSubheads as $subhead): ?>
+										<option value="<?php echo $subhead['id'];?>" <?php echo ($rent_sub_head === (int)$subhead['id']) ? 'selected' : ''; ?>><?php echo $subhead['code'].' - '.$subhead['name'];?></option>
+									<?php endforeach;?>
+								</select>
 							</div>  			
 						</div>    
 						<div class="row">
@@ -133,6 +181,46 @@ $('document').ready(function(){
 			'json'
 		);
 	});
+
+	$('#rent_block').on('change', function(){
+		$.post(
+			'<?php echo $this->url('rsdata', array('action' => 'getassetbyblock')); ?>',
+			{
+				block: $(this).val(),
+			},
+			function(data){
+				$('#rent_asset').html(data.asset);
+				$('#rent_asset').trigger('chosen:updated');
+			},
+			'json'
+		);
+	});
+
+	$('#rent_head').on('change', function(){
+		$.post(
+			'<?php echo $this->url('rsdata', array('action' => 'getsubhead')); ?>',
+			{
+				head: $(this).val(),
+			},
+			function(data){
+				$('#rent_sub_head').html(data.subhead);
+				$('#rent_sub_head').trigger('chosen:updated');
+			},
+			'json'
+		);
+	});
+
+	function toggleRentAccountingConfig() {
+		if ($('#generate_rent').val() === '1') {
+			$('.rent-accounting-config').show();
+		} else {
+			$('.rent-accounting-config').hide();
+			$('#rent_head').val('').trigger('chosen:updated');
+			$('#rent_sub_head').html("<option value=''></option>").trigger('chosen:updated');
+		}
+	}
+	$('#generate_rent').on('change', toggleRentAccountingConfig);
+	toggleRentAccountingConfig();
 	
 	$("#purchase_date").datepicker();	
 	$("#putin_date").datepicker();

@@ -110,7 +110,7 @@ class BudgetManagementController extends AbstractActionController
 			$region = $form['region'];
             $loc = $form['location'];
 		else:
-		    $tier =0;
+		    $tier =1;
 			$year = date('Y');
 			$region = '-1';
             $loc = '-1';
@@ -135,6 +135,7 @@ class BudgetManagementController extends AbstractActionController
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'transactiondetailObj' => $this->getDefinedTable(Accounts\TransactiondetailTable::class),
 			'headObj' => $this->getDefinedTable(Accounts\HeadTable::class),
+			'headtypeObj' => $this->getDefinedTable(Accounts\HeadtypeTable::class),
 			'groupObj' => $this->getDefinedTable(Accounts\GroupTable::class),
 			'classObj' => $this->getDefinedTable(Accounts\ClassTable::class), 
 			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),

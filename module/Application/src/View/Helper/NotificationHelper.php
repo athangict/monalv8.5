@@ -16,7 +16,8 @@ class Notificationhelper extends AbstractHelper
 	
 	public function __invoke($user_id)
 	{  	
-		$notifications = $this->notifyTable->getLimit(array('n.user'=>$user_id, 'n.flag'=>'0')); 
+		$this->_notifications = array();
+		$notifications = $this->notifyTable->getLimit(array('n.user'=>$user_id));
 		$notificationCount = $this->notifyTable->getCount(array('user'=>$user_id, 'flag'=>'0'));
 		foreach($notifications as $row):
 		 	$this->_notifications[] = array(

@@ -37,6 +37,21 @@ return array(
 						),
 					),
 	            ),            
+
+	            'inissue' => array(
+					'type'    => 'Segment',
+					'options' => array(
+						'route'       => '/inissue[/:action[/:id]]',
+						'constraints' => array(
+							'action'     => '[a-zA-Z][a-zA-Z0-9_-]*',
+							'id'     	 => '[a-zA-Z0-9_-]*',
+						),
+						'defaults' => array(
+							'controller' => Controller\IssueController::class,
+							'action'     => 'index',
+						),
+					),
+	            ),
 	          
 	            'stmaster' => array(
 					'type'    => 'Segment',

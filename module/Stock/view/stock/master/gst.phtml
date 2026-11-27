@@ -1,0 +1,65 @@
+<?php
+/**
+ * 
+ * View -- of Stock/MasterController/gstAction
+ * 
+ */
+	$this->headTitle($this->title);
+?>
+<?php echo $this->partial('stock/master/partial.phtml', array('active' => 'gst')); ?>
+<div class="card">
+	<div class="card-header">
+		<div class="btn-group pull-right">
+			<?php echo $this->button(2);?>
+		</div>
+	</div>
+	<table class="table table-bordered table-striped table-hover" id="dataTables">
+		<thead>
+			<tr>
+				<th>#</th>
+				<th>GST Rate (%)</th>
+				<th>Subhead</th>
+				<th class="no-sort">Action</th>
+			</tr>
+		</thead>
+		<tbody>
+			<?php
+				$i = 1; 
+				foreach ($this->gstrates as $gstrate):
+			?>
+					<tr>
+						<td><?php echo $i++; ?> </td> 
+						<td><b><?php echo $gstrate['rate']; ?></b></td>                              
+						<td>
+							<?php 
+								$subheadName = '';
+								if(isset($gstrate['subhead']) && is_numeric($gstrate['subhead']) && (int)$gstrate['subhead'] > 0):
+									$subheadCode = $this->subheadObj->getColumn((int)$gstrate['subhead'],'code');
+									$subheadLabel = $this->subheadObj->getColumn((int)$gstrate['subhead'],'name');
+									$subheadName = trim($subheadCode.' - '.$subheadLabel, ' -');
+								endif;
+								echo $subheadName;
+							?>
+						</td>
+						<td>
+							<a class="btn btn-xs btn-info" data-toggle="modal" href="<?php echo $this->url('stmaster', array('action'=>'editgst', 'id' => $gstrate['id']));?>" data-target="#modal">
+								<i class="ace-icon fa fa-pencil bigger-120"></i>
+							</a>                                                                    
+						</td>
+					</tr>
+			<?php endforeach;?>
+		</tbody>
+	</table>
+</div>
+<div id="modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content"> </div>
+    </div>
+</div>
+<script>
+$('document').ready(function(){
+	$('#dataTables').DataTable({
+		"paging":   true,
+	});
+});
+</script>

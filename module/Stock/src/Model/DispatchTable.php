@@ -1079,7 +1079,7 @@ class DispatchTable extends AbstractTableGateway
 				'sum' => new Expression('SUM(' . 'dd.quantity' . ')')
 			))
 			->where->between('d.dispatch_date', $data['start_date'], $data['end_date']);
-		$select->where(array('d.from_location' => $location, 'dd.item' => $item,'d.status'=>4));
+		$select->where(array('d.from_location' => $location, 'dd.item' => $item,'d.status'=>array(3,4)));
 		$selectString = $sql->getSqlStringForSqlObject($select);
 		$results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();
 
@@ -1128,7 +1128,7 @@ class DispatchTable extends AbstractTableGateway
 		$select->from(array('d' => $this->table))
 			->join(array('dd' => 'st_dispatch_details'), 'd.id = dd.dispatch')
 			->columns(array(
-				'sum' => new Expression('SUM(' . 'dd.accepted_qty' . ')')
+					'sum' => new Expression('SUM(' . 'dd.quantity' . ')')
 			))
 			->where->lessThan('d.dispatch_date', $data['start_date']);
 		$select->where(array('d.from_location' => $location, 'dd.item' => $item,'d.status'=>[3,4]));

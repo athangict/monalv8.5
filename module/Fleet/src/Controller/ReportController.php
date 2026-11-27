@@ -8,6 +8,7 @@ use Laminas\Authentication\AuthenticationService;
 use Interop\Container\ContainerInterface;
 use Accounts\Model As Accounts;
 use Acl\Model As Acl;
+use Asset\Model As Asset;
 use Administration\Model As Administration;
 use Hr\Model As Hr;
 use Fleet\Model As Fleet;
@@ -137,6 +138,8 @@ class ReportController extends AbstractActionController
 	public function rmreportAction()
 	{
 		$this->init();	
+		$permittedLocationIds = array_values(array_filter(array_map('trim', explode(',', (string)$this->_user->location)), 'strlen'));
+		$permittedLocationInts = array_map('intval', $permittedLocationIds);
 		
 		if($this->getRequest()->isPost()):
 			$form = $this->getRequest()->getPost();
@@ -150,15 +153,24 @@ class ReportController extends AbstractActionController
 			$start_date =date('Y-m-d');
 			$end_date   = date('Y-m-d');	
 		endif;
+		$locationInt = (int)$location;
+		if($locationInt > 0 && !in_array($locationInt, $permittedLocationInts, true)):
+			$location = '-1';
+		endif;
 		$data = array(
 			'location'  => $location,
 			'license_plate'  => $license_plate,
 			'start_date' => $start_date,
 			'end_date'   => $end_date,
 		);
+		$licenseLocationFilter = ((int)$location > 0) ? (int)$location : $permittedLocationInts;
 		//print_r($data); exit;
 		//$repairs = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseDtlsTable::class)->getAll();
 		$repairs = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseDtlsTable::class)->getDistinctTransport($location,$license_plate,$start_date,$end_date);
+		$licenseList = $this->getSecondaryVehiclesByLocation($licenseLocationFilter);
+		if (empty($licenseList)):
+			$licenseList = $this->getSecondaryVehiclesByLocation();
+		endif;
 		$ViewModel = new ViewModel(array(
 				'title'              => "RM Report",
 				'data'               => $data,
@@ -169,11 +181,13 @@ class ReportController extends AbstractActionController
 			    'TSOObject'          => $this->getDefinedTable(Fleet\TransportSanctionOrderTable::class),
 				'vehiclepartObj'     => $this->getDefinedTable(Fleet\VehiclePartTable::class),
 				'licenseObj'     => $this->getDefinedTable(Fleet\TransportTable::class),
+				'assetObj'       => $this->getDefinedTable(Asset\AssetmanagementTable::class),
 				'locationObj'     => $this->getDefinedTable(Administration\LocationTable::class),
 				'headObj'     => $this->getDefinedTable(Accounts\HeadTable::class),
 				'subheadObj'     => $this->getDefinedTable(Accounts\SubheadTable::class),
 				'partyObj'     => $this->getDefinedTable(Accounts\PartyTable::class),
-				'license'     => $this->getDefinedTable(Fleet\TransportTable::class)->getAll(),
+				'license'     => $licenseList,
+				'permitted_locations' => !empty($permittedLocationInts) ? $this->getDefinedTable(Administration\LocationTable::class)->get(array('id'=>$permittedLocationInts)) : array(),
 
 		));
 		return $ViewModel; 
@@ -184,6 +198,8 @@ class ReportController extends AbstractActionController
 	public function vrreportAction()
 	{
 		$this->init();	
+		$permittedLocationIds = array_values(array_filter(array_map('trim', explode(',', (string)$this->_user->location)), 'strlen'));
+		$permittedLocationInts = array_map('intval', $permittedLocationIds);
 		if($this->getRequest()->isPost()):
 			$form = $this->getRequest()->getPost();
 			$location  = $form['location'];
@@ -197,14 +213,23 @@ class ReportController extends AbstractActionController
 			$start_date =date('Y-m-d');
 			$end_date   = date('Y-m-d');
 		endif;
+		$locationInt = (int)$location;
+		if($locationInt > 0 && !in_array($locationInt, $permittedLocationInts, true)):
+			$location = '-1';
+		endif;
 		$data = array(
 			'location'  => $location,
 			'license_plate'  => $license_plate,
 			'start_date' => $start_date,
 			'end_date'   => $end_date,
 		);
+		$licenseLocationFilter = ((int)$location > 0) ? (int)$location : $permittedLocationInts;
 		//print_r($data); exit;
 		$transport_vr = $this->getDefinedTable(Fleet\TransportVehicleLogTable::class)->getDistinctTransport($location,$license_plate,$start_date,$end_date);
+		$licenseList = $this->getSecondaryVehiclesByLocation($licenseLocationFilter);
+		if (empty($licenseList)):
+			$licenseList = $this->getSecondaryVehiclesByLocation();
+		endif;
 		$ViewModel = new ViewModel(array(
 				'title'              => "Vehicle POL Report",
 				'data'               => $data,
@@ -214,10 +239,44 @@ class ReportController extends AbstractActionController
 			    'VRDObject'          => $this->getDefinedTable(Fleet\VehicleRequisitionDtlsTable::class),
 				'vehiclepartObj'     => $this->getDefinedTable(Fleet\VehiclePartTable::class),
 				'licenseObj'     => $this->getDefinedTable(Fleet\TransportTable::class),
+				'assetObj'       => $this->getDefinedTable(Asset\AssetmanagementTable::class),
 				'locationObj'     => $this->getDefinedTable(Administration\LocationTable::class),
 				'partyObj'     => $this->getDefinedTable(Accounts\SubheadTable::class),
+				'license'     => $licenseList,
+				'permitted_locations' => !empty($permittedLocationInts) ? $this->getDefinedTable(Administration\LocationTable::class)->get(array('id'=>$permittedLocationInts)) : array(),
 		));
 		return $ViewModel; 
+	}
+
+	private function getSecondaryVehiclesByLocation($locationFilter = null)
+	{
+		$where = array();
+		if (is_array($locationFilter) && !empty($locationFilter)):
+			$where['location'] = $locationFilter;
+		elseif ((int)$locationFilter > 0):
+			$where['location'] = (int)$locationFilter;
+		endif;
+
+		$rows = empty($where)
+			? $this->getDefinedTable(Fleet\VehicleRegisterTable::class)->getAll()
+			: $this->getDefinedTable(Fleet\VehicleRegisterTable::class)->get($where);
+
+		$assetObj = $this->getDefinedTable(Asset\AssetmanagementTable::class);
+		$vehicles = array();
+		$seen = array();
+		foreach($rows as $row):
+			$assetVehicleId = isset($row['asset_vehicle_id']) ? (int)$row['asset_vehicle_id'] : 0;
+			if($assetVehicleId <= 0 || isset($seen[$assetVehicleId])):
+				continue;
+			endif;
+			$seen[$assetVehicleId] = true;
+			$vehicles[] = array(
+				'id' => $assetVehicleId,
+				'vehicle_code' => (string)$assetObj->getColumn($assetVehicleId, 'code'),
+				'license_plate' => (string)$assetObj->getColumn($assetVehicleId, 'name'),
+			);
+		endforeach;
+		return $vehicles;
 	}
 	/**
 	 * vehicle report action
@@ -258,13 +317,27 @@ class ReportController extends AbstractActionController
 	**/
 	public function gettransportAction()
 	{		
+		$this->init();
 		$form = $this->getRequest()->getPost();
-		$locationId =$form['locationId'];
-		$veh_list = $this->getDefinedTable(Fleet\TransportTable::class)->get(array('location'=>$locationId));
+		$locationId = isset($form['locationId']) ? (int)$form['locationId'] : -1;
+		$permittedLocationIds = array_values(array_filter(array_map('intval', array_map('trim', explode(',', (string)$this->_user->location)))));
+		if($locationId > 0):
+			if(!in_array($locationId, $permittedLocationIds, true)):
+				$veh_list = array();
+			else:
+				$veh_list = $this->getSecondaryVehiclesByLocation($locationId);
+			endif;
+		else:
+			$veh_list = $this->getSecondaryVehiclesByLocation($permittedLocationIds);
+		endif;
+		if (empty($veh_list)):
+			$veh_list = $this->getSecondaryVehiclesByLocation();
+		endif;
 		
 			$license_plate = "<option value='-1'>All</option>";
 		foreach($veh_list as $veh_lists):
-			$license_plate.="<option value='".$veh_lists['id']."'>".$veh_lists['license_plate']."</option>";
+			$vehicleLabel = trim($veh_lists['vehicle_code'].' - '.$veh_lists['license_plate'], ' -');
+			$license_plate.="<option value='".$veh_lists['id']."'>".$vehicleLabel."</option>";
 		endforeach;
 		echo json_encode(array(
 				'license_plate' => $license_plate,

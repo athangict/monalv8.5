@@ -28,14 +28,19 @@
                         $allnotifications = $this->notifyObj->get(array('user' =>$this->userID));
                         foreach ($allnotifications as $row):
                             
-                            if($row['flag']==0){ $trCalss = "success"; }else { $trCalss = ""; }
+                            $isUnread = (int) $row['flag'] === 0;
+                            $trCalss = $isUnread ? "warning" : "";
                     ?>
                         <tr class="<?php echo $trCalss; ?>">
                             <td><?php echo $i++; ?> </td>
                             <td><?php 
                             $notificationResult = $this->notificationsObj->get($row['notification']);
                             foreach($notificationResult as $notify); ?>
-                            <a href="<?php echo $this->url($notify['route'], array('action'=>$notify['action'], 'id'=>$notify['key']));?>"><?php echo $notify['description'];?></a></td>        
+                            <a href="<?php echo $this->url($notify['route'], array('action'=>$notify['action'], 'id'=>$notify['key'].'-1-'.$row['id']));?>">
+                                <i class="fa fa-circle <?php echo $isUnread ? 'red notification-unread-dot' : 'green'; ?>" aria-hidden="true"></i>
+                                <span class="sr-only"><?php echo $isUnread ? 'Unread' : 'Viewed'; ?>: </span>
+                                <?php echo $notify['description'];?>
+                            </a></td>
                             <td> <?php $datetime =strtotime($row['created']);
                                     echo date("F j, Y, g:i a",$datetime);?>
                             </td>

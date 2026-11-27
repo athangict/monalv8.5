@@ -205,13 +205,30 @@ class PayheadtypeTable extends AbstractTableGateway
 		return null;
 	}
 
+	public static function isSalaryTaxOrTdsName($headType)
+	{
+		if (!is_scalar($headType)) {
+			return false;
+		}
+		$headType = (string) $headType;
+		return stripos($headType, 'salary tax') !== false || stripos($headType, 'tds') !== false;
+	}
+
 	public function getLeaveEncashmentSubheadId()
 	{
-		$payheadTypes = $this->get(array('code' => 'LE'));
-		if (count($payheadTypes) !== 1) {
+		$matches = array();
+		foreach ($this->getAll() as $payheadType) {
+			$codeMatches = isset($payheadType['code']) && strtoupper(trim((string) $payheadType['code'])) === 'LE';
+			$nameMatches = isset($payheadType['head_type'])
+				&& stripos((string) $payheadType['head_type'], 'leave encash') !== false;
+			if ($codeMatches || $nameMatches) {
+				$matches[] = $payheadType;
+			}
+		}
+		if (count($matches) !== 1) {
 			return null;
 		}
-		$subheadId = $this->getFinanceSubheadId($payheadTypes[0]['id']);
+		$subheadId = $this->getFinanceSubheadId($matches[0]['id']);
 		if ($subheadId === null) {
 			return null;
 		}
@@ -257,9 +274,9 @@ class PayheadtypeTable extends AbstractTableGateway
 			->order(array('pht.head_type ASC', 'sh.code ASC'));
 		if ($onlyNetPayable) {
 			$select->where->nest
-				->like('pht.head_type', '%Net Payable%')
+				->expression('LOWER(pht.head_type) LIKE ?', array('%net payable%'))
 				->or
-				->equalTo('pht.code', 'SNP')
+				->expression('UPPER(pht.code) = ?', array('SNP'))
 				->unnest;
 		}
 		$selectString = $sql->getSqlStringForSqlObject($select);

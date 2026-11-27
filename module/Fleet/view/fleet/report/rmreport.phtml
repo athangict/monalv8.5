@@ -20,7 +20,7 @@
 							<select class="form-control" name="location" id="location" data-placeholder="select" >
 								<option value="-1" <?php echo ($data['location']=='-1')?'selected':'';?>>All</option>
 								<?php 
-									$location = $this->locationObj->getAll();
+									$location = $permitted_locations;
 									foreach($location as $row):
 										$selected_location = ($row['id']==$data['location'])?'selected':'';
 								?>
@@ -32,11 +32,11 @@
 							</select>
 						</div>
 						<div class="form-group col-lg-2">
-							<label class="control-label" for="license_plate">License plate</label>
+							<label class="control-label" for="license_plate">Vehicle</label>
 							<select class="form-control" name="license_plate" id="license_plate" data-placeholder="select" >
 								<option value="-1" <?php echo ($data['license_plate']=='-1')?'selected':'';?>>All</option>
 								<?php foreach($license as $li):?>
-									<option value="<?php echo $li['id'];?>" <?php echo ($li['id']==$data['license_plate'])?'selected':'';?>><?php echo $li['license_plate']?></option>
+									<option value="<?php echo $li['id'];?>" <?php echo ($li['id']==$data['license_plate'])?'selected':'';?>><?php echo trim($li['vehicle_code'].' - '.$li['license_plate'], ' -');?></option>
 								<?php endforeach;?>
 							</select>
 						</div>
@@ -63,13 +63,13 @@
 				<div class="space-6"></div>
 				<div class="row col-lg-12">
 					<div class="clearfix">
-						<label><i class="blue fa fa-cube"></i> <strong>Transport : &nbsp;&nbsp;</strong></label><span><?php echo ($data["license_plate"] == -1 || !isset($data['license_plate']))? "All Transport":$this->TObject->getColumn($data['license_plate'],'license_plate');?></span>.&nbsp;&nbsp;
+						<label><i class="blue fa fa-cube"></i> <strong>Vehicle : &nbsp;&nbsp;</strong></label><span><?php echo ($data["license_plate"] == -1 || !isset($data['license_plate']))? "All Vehicle":trim($this->assetObj->getColumn($data['license_plate'],'code').' - '.$this->assetObj->getColumn($data['license_plate'],'name'), ' -');?></span>.&nbsp;&nbsp;
 						<label><i class="green fa fa-calendar"></i> <strong>Date : &nbsp;&nbsp;</strong></label><span><?php echo (!isset($data['start_date']))?'-select-':$data['start_date'].' to '.$data['end_date'];?></span>
 					</div>
 				</div>
 				<div class="row col-lg-12">
 					<div class="clearfix">
-					<input type="hidden" name="transport" id="transport" value="<?php echo (!isset($data['transport']) || $data['transport'] == -1)? "All Transport":$this->TObject->getColumn($data['transport'],'code');?>">
+					<input type="hidden" name="transport" id="transport" value="<?php echo ($data["license_plate"] == -1 || !isset($data['license_plate']))? "All Vehicle":trim($this->assetObj->getColumn($data['license_plate'],'code').' - '.$this->assetObj->getColumn($data['license_plate'],'name'), ' -');?>">
 					<input type="hidden" name="st_date" id="st_date" value="<?php echo $data['start_date']?>">
 					<input type="hidden" name="ed_date" id="ed_date" value="<?php echo $data['end_date'];?>">
 					</div>
@@ -89,71 +89,71 @@
 								<tbody>
 									<?php $totale=0;$totali=0;?>
 									<tr class="warning">
-										<td>INCOME</td>
+										<td><strong>INCOME</strong></td>
 										<td></td>
 									</tr>
 									<?php foreach($this->RMDObject->getDistinctGroup('rmd.amount',$data['location'],$data['license_plate'],$data['start_date'],$data['end_date'],array('g.class'=>3)) as $group):?>
 										<tr class="info">
-											<td class="text-danger">&nbsp;&nbsp;<?php echo $group['group'];?></td>
-											<td><?php echo number_format($group['sum'], 2, '.', ',');?></td>
+											<td>&nbsp;&nbsp;<strong><?php echo trim((string)($group['group'] ?? '')) ?: '-';?></strong></td>
+											<td><?php echo number_format((float)($group['sum'] ?? 0), 2, '.', ',');?></td>
 										</tr>
 											<?php foreach($this->RMDObject->getDistinctHead('rmd.amount',$data['location'],$data['license_plate'],$data['start_date'],$data['end_date'],array('h.group'=>$group['group_id'])) as $head):?>
 											<tr class="success">
 												<td class="text-success">&nbsp;&nbsp;&nbsp;<?php echo $head['head'];?></td>
-												<td><?php echo number_format($head['sum'], 2, '.', ',');?></td>
+												<td><?php echo number_format((float)($head['sum'] ?? 0), 2, '.', ',');?></td>
 											</tr>
 												<?php foreach($this->RMDObject->getDistinctSubHead('rmd.amount',$data['location'],$data['license_plate'],$data['start_date'],$data['end_date'],array('sh.head'=>$head['head_id'])) as $sh):?>
 												<tr>
-													<td>&nbsp;&nbsp;&nbsp;&nbsp;<?php echo $sh['subhead'];?></td>
-													<td><?php echo number_format($sh['sum'], 2, '.', ',');?></td>
+													<td>&nbsp;&nbsp;&nbsp;&nbsp;<i><?php echo $sh['subhead'];?></i></td>
+													<td><?php echo number_format((float)($sh['sum'] ?? 0), 2, '.', ',');?></td>
 												</tr>
 										<?php endforeach;endforeach;$totali+=$group['sum'];endforeach;
 										?>
 										<tr class="text-success">
 										<td><b>TOTAL INCOME:</b></td>
-										<td><b><?php echo number_format($totali, 2, '.', ',');?></b></td>
+										<td><b><?php echo number_format((float)$totali, 2, '.', ',');?></b></td>
 									</tr>
 									<tr class="warning">
-										<td>Expense</td>
+										<td><strong>EXPENSE</strong></td>
 										<td></td>
 									</tr>
 									 	<?php $total=0;foreach($this->RMDObject->getDistinctGroup('rmd.amount',$data['location'],$data['license_plate'],$data['start_date'],$data['end_date'],array('g.class'=>4)) as $group):?>
 										<tr class="info">
-											<td class="text-danger">&nbsp;&nbsp;<?php echo $group['group'];?></td>
+											<td>&nbsp;&nbsp;<strong><?php echo trim((string)($group['group'] ?? '')) ?: '-';?></strong></td>
 											<td><?php $pol_group_sum=$this->TSOObject->getGroupSum('so.amount',$data['location'],$data['license_plate'],$data['start_date'],$data['end_date'],array('g.class'=>4,'so.status'=>4,'g.id'=>$group['group_id']));
 											$tot_group=$group['sum']+$pol_group_sum;
-											echo number_format($tot_group, 2, '.', ',');?></td>
+											echo number_format((float)$tot_group, 2, '.', ',');?></td>
 										</tr>
 											<?php foreach($this->RMDObject->getDistinctHead('rmd.amount',$data['location'],$data['license_plate'],$data['start_date'],$data['end_date'],array('h.group'=>$group['group_id'])) as $head):?>
 											<tr class="success">
 												<td class="text-success">&nbsp;&nbsp;&nbsp;<?php echo $head['head'];?></td>
-												<td><?php echo number_format( $head['sum'], 2, '.', ',');?></td>
+												<td><?php echo number_format((float)($head['sum'] ?? 0), 2, '.', ',');?></td>
 											</tr>
 												<?php foreach($this->RMDObject->getDistinctSubHead('rmd.amount',$data['location'],$data['license_plate'],$data['start_date'],$data['end_date'],array('sh.head'=>$head['head_id'])) as $sh):?>
 												<tr>
-													<td>&nbsp;&nbsp;&nbsp;&nbsp;<?php echo $sh['subhead'];?></td>
-													<td><?php echo number_format($sh['sum'], 2, '.', ',');?></td>
+													<td>&nbsp;&nbsp;&nbsp;&nbsp;<i><?php echo $sh['subhead'];?></i></td>
+													<td><?php echo number_format((float)($sh['sum'] ?? 0), 2, '.', ',');?></td>
 												</tr>
 										<?php endforeach;endforeach; 
 										foreach($this->TSOObject->getDistinctHead('so.amount',$data['location'],$data['license_plate'],$data['start_date'],$data['end_date'],array('h.group'=>$group['group_id'],'so.status'=>4)) as $head):?>
 											<tr class="success">
 												<td class="text-success">&nbsp;&nbsp;&nbsp;<?php echo $head['head'];?></td>
-												<td><?php echo number_format( $head['sum'], 2, '.', ',');?></td>
+												<td><?php echo number_format((float)($head['sum'] ?? 0), 2, '.', ',');?></td>
 											</tr>
 												<?php foreach($this->TSOObject->getDistinctSubHead('so.amount',$data['location'],$data['license_plate'],$data['start_date'],$data['end_date'],array('sh.head'=>$head['head_id'],'so.status'=>4)) as $sh):?>
 												<tr>
-													<td>&nbsp;&nbsp;&nbsp;&nbsp;<?php echo $sh['subhead'];?></td>
-													<td><?php echo number_format($sh['sum'], 2, '.', ',');?></td>
+													<td>&nbsp;&nbsp;&nbsp;&nbsp;<i><?php echo $sh['subhead'];?></i></td>
+													<td><?php echo number_format((float)($sh['sum'] ?? 0), 2, '.', ',');?></td>
 												</tr>
 										<?php endforeach;endforeach;$totale+=$tot_group;endforeach;?>
 										
 									<tr class="text-danger">
 										<td><b>TOTAL EXPENSE:</b></td>
-										<td><b><?php echo number_format($totale, 2, '.', ',');?></b></td>
+										<td><b><?php echo number_format((float)$totale, 2, '.', ',');?></b></td>
 									</tr> 
 									<tr >
 										<td><b>MARGIN:</b></td>
-										<td><b><?php echo number_format($totali-$totale, 2, '.', ',');?></b></td>
+										<td><b><?php echo number_format((float)$totali-(float)$totale, 2, '.', ',');?></b></td>
 									</tr> 
 								</tbody>
 							</table>
@@ -184,11 +184,15 @@
 				function(data){
 					$('select#license_plate').html(data.license_plate);
 					$(license_plate).trigger('chosen:updated');
+					var selectedVehicle = "<?php echo isset($data['license_plate']) ? $data['license_plate'] : '-1';?>";
+					$('select#license_plate').val(selectedVehicle);
+					$('select#license_plate').trigger('chosen:updated');
 
 				   },
 				'json'
 			);
 	    });
+		$('select#location').trigger('change');
 		const fv = FormValidation.formValidation(document.getElementById('#form'), {
 				fields: {
 					start_date: {

@@ -18,16 +18,24 @@
 				<tr>
 					<th>#</th>
 					<th>Role</th>
+					<th>None</th>
+					<th>Credit</th>
+					<th>Advance</th>
 					<?php if($this->button(1)!=""):?>
 						<th class="no-sort no-printpdf">Action</th>
 					<?php endif;?>	
 				</tr>
 			</thead>
 			<tbody>
-			<?php $i=1+(($page-1)*20); foreach ($paginator as $row):?>
+			<?php $i=1+(($page-1)*20); foreach ($paginator as $row):
+				$partyMode = (int)$row['credit'];
+			?>
 				<tr>
 					<td><?php  echo $i++; ?></td>								       
 					<td class="fw-bold"><?php echo $row['role'];?></td>
+					<td><?php echo ($partyMode === 0) ? 'Yes' : 'No';?></td>
+					<td><?php echo ($partyMode === 1) ? 'Yes' : 'No';?></td>
+					<td><?php echo ($partyMode === 2) ? 'Yes' : 'No';?></td>
 					<?php if($this->button(1)!=""):?>
 						<td><?php echo $this->button(1, $row['id'].'_'.$page);?></td>
 					<?php endif;?>

@@ -215,6 +215,7 @@ class AssetController extends AbstractActionController
 		));
 		exit;
 	}
+
 	/**
 	 *  addasset action
 	 */
@@ -469,7 +470,7 @@ class AssetController extends AbstractActionController
 		$this->init();
 		if($this->getRequest()->isPost()){
             $form = $this->getRequest()->getPost();
-			//$disposal_amount = sprintf("%.2f", $form['disposal_amount']);
+			$disposal_amount = str_replace(",", "", $form['disposal_amount']);
 			 $data=array(
 				'id' 				=> $this->_id,
 				'disposal_amount' 	=>$form['disposal_amount'],
@@ -482,9 +483,7 @@ class AssetController extends AbstractActionController
 			$asset_type =$this->getDefinedTable(Asset\AssetmanagementTable::class)->getColumn($this->_id,'asset_type');
 			$asset_subhead = $this->getDefinedTable(Asset\AssettypeTable::class)->getColumn($asset_type,'subhead');
 			$asset_head = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn($asset_subhead,'head');
-			//echo '<pre>';print_r($asset_head);
-			//echo '<pre>';print_r($asset_subhead);
-			//echo '<pre>';print_r($asset_type);exit;
+		
             $data = $this->_safedataObj->rteSafe($data);
 			$this->_connection->beginTransaction(); //***Transaction begins here***//
             $result = $this->getDefinedTable(Asset\AssetmanagementTable::class)->save($data);
@@ -495,13 +494,7 @@ class AssetController extends AbstractActionController
 				$date = date('ym',strtotime($form['disposal_date']));
 				$tmp_VCNo = $loc.'-'.$prefix.$date;
 				
-				 $results = $this->getDefinedTable(Accounts\TransactionTable::class)->getSerial($tmp_VCNo);
-				
-				$pltp_no_list = array();
-				foreach($results as $result):
-					array_push($pltp_no_list, substr($result['voucher_no'], -4));
-				endforeach;
-				$next_serial = max($pltp_no_list) + 1; 
+				$next_serial = $this->getDefinedTable(Accounts\TransactionTable::class)->getNextSerial($tmp_VCNo);
 					
 				switch(strlen($next_serial)){
 					case 1: $next_dc_serial = "0000".$next_serial; break;
@@ -520,20 +513,23 @@ class AssetController extends AbstractActionController
 					'doc_type' => '',
 					'voucher_no' => $voucher_no,
 					'cheque_no' => '',
-					'voucher_amount' => str_replace( ",", "",$form['disposal_amount']),
+					'voucher_amount' => $disposal_amount,
 					'remark' => 'Disposal of Asset',
 					'status' => 4, // status initiated 
 					'author' =>$this->_author,
 					'created' =>$this->_created,  
 					'modified' =>$this->_modified,
 				);
-				$data = $this->_safedataObj->rteSafe($data);
+				$data1 = $this->_safedataObj->rteSafe($data1);
                 $result1 = $this->getDefinedTable(Accounts\TransactionTable::class)->save($data1);
 				$location =$this->getDefinedTable(Administration\LocationTable::class)->getcolumn($this->_user->location, 'id');
 				/*EXPENSE*/
-				$head = 212;
-				$sub_head =2927;
-				if($result1 > 0):
+				$sub_head = $this->getDefinedTable(Asset\AssettypeTable::class)->getColumn($asset_type, 'disposal_subhead');
+				$head = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn($sub_head, 'head');
+				if(empty($sub_head) || empty($head)):
+					$this->_connection->rollback();
+					$this->flashMessenger()->addMessage("Failed^ Disposal sub-head is not configured for this asset type");
+				elseif($result1 > 0):
 				    /*EXPENSE HIT ON DISPOSE*/
 				    $curent_asset_net_value = array(
 						'transaction' => $result1,
@@ -545,7 +541,7 @@ class AssetController extends AbstractActionController
 						'sub_head' => $sub_head,//loss on the sale of asset
 						'bank_ref_type' => '',
 						'cheque_no' => "",
-						'debit' => $form['disposal_amount'],//current Net value of the asset
+						'debit' => $disposal_amount,//current Net value of the asset
 						'credit' =>'0.000',
 						'ref_no'=> '', 
 						'type' => '1',//user inputted  data
@@ -565,7 +561,7 @@ class AssetController extends AbstractActionController
 						'bank_ref_type' => '',
 						'cheque_no' => '',
 						'debit' =>'0.000',
-						'credit' => $form['disposal_amount'],//asset value of the purchase
+						'credit' => $disposal_amount,//asset value of the purchase
 						'ref_no'=> '', 
 						'type' => '1',//user inputted  data
 						'status' => 4, // status initiated
@@ -579,8 +575,16 @@ class AssetController extends AbstractActionController
 					$inventories_out_asset = $this->_safedataObj->rteSafe($inventories_out_asset);
 					$result2 = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->save($curent_asset_net_value);
 					$result4 = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->save($inventories_out_asset); 
-					$this->_connection->commit(); // commit transaction on success
-					$this->flashMessenger()->addMessage("success^ Asset successfully Disposed");
+					if($result2 > 0 && $result4 > 0):
+						$this->_connection->commit(); // commit transaction on success
+						$this->flashMessenger()->addMessage("success^ Asset successfully Disposed");
+					else:
+						$this->_connection->rollback();
+						$this->flashMessenger()->addMessage("Failed^ Failed to create disposal transaction details");
+					endif;
+				else:
+					$this->_connection->rollback();
+					$this->flashMessenger()->addMessage("Failed^ Failed to create disposal transaction");
 				 endif;
             else:
 				$this->_connection->rollback(); // rollback transaction over failure
@@ -708,7 +712,7 @@ class AssetController extends AbstractActionController
 				$dep_amount=$row['net']-1;
 			}
 			
-			if($row['net']>1 && $row['asset_type']!=16){
+			if($row['net']>1){
 				if(($year==$my[0] && $my[1]>=$month) || $year<$my[0]){
 					$data = array(
 						'asset' 		=> $row['id'],
@@ -814,7 +818,13 @@ class AssetController extends AbstractActionController
 		$day=date('d');
 		$dep_date= $my[0].'-'.$my[1].'-'.$day;
 		foreach($types as $type){
-			$location=286;
+			$location = (int)$this->getDefinedTable(Asset\DepreciationTable::Class)->getColumn(
+				array('year' => $my[0], 'month' => $my[1], 'type' => $type['column']),
+				'location'
+			);
+			if($location <= 0 || $this->getDefinedTable(Administration\LocationTable::class)->getColumn($location, 'id') === ''):
+				$location = (int)$this->getDefinedTable(Administration\LocationTable::class)->getMin('id');
+			endif;
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($location, 'prefix');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getcolumn(19,'prefix');
 			$date = date('ym',strtotime(date('Y-m-d')));
@@ -959,7 +969,7 @@ class AssetController extends AbstractActionController
 		$this->init();
 		if($this->getRequest()->isPost()){
             $form = $this->getRequest()->getPost();
-			//$disposal_amount = sprintf("%.2f", $form['disposal_amount']);
+			$writeoff_amount = str_replace(",", "", $form['writeoff_amount']);
 			 $data=array(
 				'id' 				=> $this->_id,
 				'writeoff_amount' 	=>$form['writeoff_amount'],
@@ -981,7 +991,7 @@ class AssetController extends AbstractActionController
 			if($result > 0):
 			    //generate voucher no
 				$loc = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($this->_user->location, 'prefix');
-				$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getcolumn(26,'prefix');
+				$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getcolumn(20,'prefix');
 				$date = date('ym',strtotime($form['write_off_date']));
 				$tmp_VCNo = $loc.'-'.$prefix.$date;
 				
@@ -991,7 +1001,7 @@ class AssetController extends AbstractActionController
 				foreach($results as $result):
 					array_push($pltp_no_list, substr($result['voucher_no'], -4));
 				endforeach;
-				$next_serial = max($pltp_no_list) + 1; 
+				$next_serial = $pltp_no_list ? max($pltp_no_list) + 1 : 1; 
 					
 				switch(strlen($next_serial)){
 					case 1: $next_dc_serial = "0000".$next_serial; break;
@@ -1004,38 +1014,41 @@ class AssetController extends AbstractActionController
 				$region =$this->getDefinedTable(Administration\LocationTable::class)->getcolumn($this->_user->location, 'region');
 				$data1 = array(
 					'voucher_date' =>$form['write_off_date'],
-					'voucher_type' => 24,
+					'voucher_type' => 20,
 					'region'   =>$region,
 					'doc_id' => 'Asset Write Off',
 					'doc_type' => '',
 					'voucher_no' => $voucher_no,
 					'cheque_no' => '',
-					'voucher_amount' => str_replace( ",", "",$form['writeoff_amount']),
+					'voucher_amount' => $writeoff_amount,
 					'remark' => 'Write Off of Asset',
 					'status' => 4, // status initiated 
 					'author' =>$this->_author,
 					'created' =>$this->_created,  
 					'modified' =>$this->_modified,
 				);
-				$data = $this->_safedataObj->rteSafe($data);
+				$data1 = $this->_safedataObj->rteSafe($data1);
                 $result1 = $this->getDefinedTable(Accounts\TransactionTable::class)->save($data1);
 				$location =$this->getDefinedTable(Administration\LocationTable::class)->getcolumn($this->_user->location, 'id');
 				/*EXPENSE*/
-				$head = 212;
-				$sub_head =1713;
-				if($result1 > 0):
-				    /*EXPENSE HIT ON DISPOSE*/
+				$sub_head = $this->getDefinedTable(Asset\AssettypeTable::class)->getColumn($asset_type, 'writeoff_subhead');
+				$head = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn($sub_head, 'head');
+				if(empty($sub_head) || empty($head)):
+					$this->_connection->rollback();
+					$this->flashMessenger()->addMessage("Failed^ Writeoff sub-head is not configured for this asset type");
+				elseif($result1 > 0):
+				    /*EXPENSE HIT ON Write Off*/
 				    $curent_asset_net_value = array(
 						'transaction' => $result1,
 						'voucher_dates' => $form['write_off_date'],
-						'voucher_types' =>24,
+						'voucher_types' =>20,
 						'location' => $location,
 						'activity' => $location,
 						'head' => $head,//Other General and admin expense
 						'sub_head' => $sub_head,//loss on the sale of asset
 						'bank_ref_type' => '',
 						'cheque_no' => "",
-						'debit' => $form['writeoff_amount'],//current Net value of the asset
+						'debit' => $writeoff_amount,//current Net value of the asset
 						'credit' =>'0.000',
 						'ref_no'=> '', 
 						'type' => '1',//user inputted  data
@@ -1047,7 +1060,7 @@ class AssetController extends AbstractActionController
 					$inventories_out_asset = array(
 						'transaction' => $result1,
 						'voucher_dates' =>$form['write_off_date'],
-						'voucher_types' =>24,
+						'voucher_types' =>20,
 						'location' => $location,
 						'activity' => $location,
 						'head' => $asset_head,//Subtract on the inventory
@@ -1055,7 +1068,7 @@ class AssetController extends AbstractActionController
 						'bank_ref_type' => '',
 						'cheque_no' => '',
 						'debit' =>'0.000',
-						'credit' => $form['writeoff_amount'],//asset value of the purchase
+						'credit' => $writeoff_amount,//asset value of the purchase
 						'ref_no'=> '', 
 						'type' => '1',//user inputted  data
 						'status' => 4, // status initiated
@@ -1063,14 +1076,20 @@ class AssetController extends AbstractActionController
 						'created' =>$this->_created,
 						'modified' =>$this->_modified,
 					);
-					//echo '<pre>';print_r($expensedata);
-					//echo '<pre>';print_r($inventoriesdata);exit;
 					$curent_asset_net_value = $this->_safedataObj->rteSafe($curent_asset_net_value);
 					$inventories_out_asset = $this->_safedataObj->rteSafe($inventories_out_asset);
 					$result2 = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->save($curent_asset_net_value);
 					$result4 = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->save($inventories_out_asset); 
-					$this->_connection->commit(); // commit transaction on success
-					$this->flashMessenger()->addMessage("success^ Asset successfully Disposed");
+					if($result2 > 0 && $result4 > 0):
+						$this->_connection->commit(); // commit transaction on success
+						$this->flashMessenger()->addMessage("success^ Asset successfully written off");
+					else:
+						$this->_connection->rollback();
+						$this->flashMessenger()->addMessage("Failed^ Failed to create writeoff transaction details");
+					endif;
+				else:
+					$this->_connection->rollback();
+					$this->flashMessenger()->addMessage("Failed^ Failed to create writeoff transaction");
 				 endif;
             else:
 				$this->_connection->rollback(); // rollback transaction over failure

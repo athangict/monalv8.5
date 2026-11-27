@@ -15,8 +15,8 @@
 
 ?>
 <div class="modal-header">
+	<button type="button" class="close" data-dismiss="modal" aria-label="Close">&times;</button>
 	<h4 class="modal-title"><i class="<?php echo $button['icon']; ?>"></i> <b><?php echo $button['action']; ?></b></h4>
-	<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 </div>  <!-- /modal-header -->
 <?php
 $flag = 1;     
@@ -48,6 +48,27 @@ if($flag != "1"){ ?>
 			<input type="hidden" value="<?php echo $action_id; ?>" name="action">
 			<input type="hidden" value="<?php echo $leave_id; ?>" name="sitting">
 			<input type="hidden" name="employee" value="<?php echo $emp['id'];?>">							
+			<?php if($action_id == 3): ?>
+			<?php if(empty($sittingFeeAccount) || empty($sittingTdsAccount)): ?>
+			<div class="alert alert-warning">
+				Configure one non-deduction PayHead Type with a name containing "Sitting" for the Sitting Fee expense, and one deduction PayHead Type with a name containing "Salary Tax" or "TDS" for TDS. Both require Finance Sub Head mappings.
+			</div>
+			<?php endif; ?>
+			<div class="form-group">
+				<label class="form-label" for="bank_sub_head">Bank Account</label>
+				<select id="bank_sub_head" name="bank_sub_head" class="form-control" data-placeholder="Select" required>
+					<option value=""></option>
+					<?php foreach ($bankOptions as $bankOption): ?>
+						<option value="<?php echo $bankOption['id']; ?>">
+							<?php echo $bankOption['code'].' - '.$bankOption['name']; ?>
+						</option>
+					<?php endforeach; ?>
+				</select>
+				<?php if (empty($bankOptions)): ?>
+					<div class="alert alert-warning" style="margin-top:8px;">No bank account subheads found. Please configure Bank Account type subheads first.</div>
+				<?php endif; ?>
+			</div>
+			<?php endif; ?>
               <?php //if($button['id']==3 || $button['id']==4)://chief?>
 			<!--div class="form-group mb-3">
                 <label class="form-label" for="focal">Assign Focal</label>
@@ -83,7 +104,7 @@ if($flag != "1"){ ?>
 			</div>
 		</div>
 		<div class="modal-footer">
-			<button type="submit" class="btn <?php echo $button['class'];?>"><i class="icon <?php echo $button['icon']; ?>"></i> <?php echo $button['action'];?></button>
+			<button type="submit" class="btn <?php echo $button['class'];?>" <?php echo ($action_id == 3 && (empty($bankOptions) || empty($sittingFeeAccount) || empty($sittingTdsAccount))) ? 'disabled' : ''; ?>><i class="icon <?php echo $button['icon']; ?>"></i> <?php echo $button['action'];?></button>
 			<button type="button" class="btn btn-warning" data-dismiss="modal" ><i class="fa fa-times"></i> Cancel </button> 
 		</div>
 	</form>

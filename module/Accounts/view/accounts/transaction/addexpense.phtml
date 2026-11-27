@@ -20,8 +20,8 @@
             <div class="widget-body">
 				<div class="widget-main">
 					<form  id="transForm" method="post" action="<?php echo $this->url('transaction', array('action' => 'addexpense')); ?>"  enctype="multipart/form-data" >    
-						<div class="row"> 
-							<div class="col-lg-4">    
+						<div class="account-entry-header">
+							<div class="account-entry-header-field">
 							    <input type="hidden" id="against_vid" name="against_vid" value="<?php echo $row['id'];?>"/>
 								<div class="form-group">
 									<label for="voucher_date" class="control-label">Voucher Date</label>
@@ -31,46 +31,48 @@
 									</div>
 								</div>
 							</div>
-							 <div class="col-lg-4">
+							<div class="account-entry-header-field">
 								<div class="form-group">
 									<label for="voucher_type">Voucher Type</label>
 									<select id="voucher_type" name="voucher_type" class="form-control " data-placeholder="Select"  readonly>
 										<option value="12">Against Voucher</option>
 									</select>
 								</div>
-							</div>					
-							<div class="col-lg-4">
-								<div class="form-group">
-									<label for="doc_id" class="control-label">Document ID</label>
-									<input type="text" class="form-control" name="doc_id" id="doc_id"  > 
-								</div> 
 							</div>
-						</div>
-						<div class="row">
-							<div class="col-lg-4">
-								<div class="form-group">
-									<label for="doc_type" class="control-label">Document Type</label>
-									<input type="text" class="form-control" name="doc_type" id="doc_type"> 
-								</div>
-							</div> 
-							<div class="col-lg-4">
-								<div class="form-group">
-									<label for="voucher_amount" class="control-label">Voucher Amount</label>
-									<input type="text" class="form-control" name="voucher_amount" id="voucher_amount" value="0.000" required readonly />
-								</div>
-							</div>  
-                            <div class="col-lg-4">
+							<div class="account-entry-header-field">
 								<div class="form-group">
 									<label for="cheque_no1" class="control-label">Checque No.</label>
 									<input type="text" class="form-control" name="cheque_no1" id="cheque_no1"/>
 								</div>
-							</div>							
+							</div>
+							<div class="account-entry-header-field account-entry-document-field">
+								<div class="form-group">
+									<label for="doc_id" class="control-label">Document ID</label>
+									<input type="text" class="form-control" name="doc_id" id="doc_id"  >
+								</div>
+							</div>
+							<div class="account-entry-header-field account-entry-document-field">
+								<div class="form-group">
+									<label for="doc_type" class="control-label">Document Type</label>
+									<input type="text" class="form-control" name="doc_type" id="doc_type">
+								</div>
+							</div>
+							<div class="account-entry-header-field account-entry-amount-field">
+								<div class="form-group">
+									<label for="voucher_amount" class="control-label">Voucher Amount</label>
+									<input type="text" class="form-control" name="voucher_amount" id="voucher_amount" value="0.000" required readonly />
+								</div>
+							</div>
 						</div>
 						<div class="row">
-							<div class="col-lg-12"> 
+							<div class="col-lg-12">
 								<h5>Transaction Details</h5>
 								<div>
-									<table id="trdetails_table" class="table small-padding">
+									<table id="trdetails_table" class="table small-padding account-entry-details">
+										<colgroup>
+											<col span="5">
+											<col class="transaction-action-column">
+										</colgroup>
 										<thead>
 											<tr>
 												<th>Location</th>
@@ -83,33 +85,35 @@
 										</thead>
 										<tbody>
 											<tr>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<select id="location" name="location[]" class="form-control" data-placeholder="Select" required readonly>
+															<?php if (in_array((int) $trans['location_id'], array_map('intval', array_column($entryLocations, 'id')), true)): ?>
 															<option value="<?php echo $trans['location_id']?>"><?php echo $trans['location']?></option>
+															<?php endif; ?>
 														</select>
 													</div>
 												</td>
-												<td class="col-lg-4">
+												<td>
 													<div class="form-group">
 														<select id="head" name="head[]" class="form-control tr_head" data-placeholder="Select" required readonly>
 															<option value="<?php echo $trans['head_id']?>"><?php echo $trans['head']?></option>
 														</select>
 													</div>
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<select id="sub_head" name="sub_head[]" class="form-control" data-placeholder="Select" required readonly>
 															<option value="<?php echo $trans['sub_head_id']?>"><?php echo $trans['sub_head']?></option>
 														</select>
 													</div>
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<input type="text" class="form-control tr_debit" name="debit[]"  value="<?php echo $trans['credit']?>" id="debit" readonly>
 													</div>         
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<input type="text" class="form-control tr_credit" name="credit[]"  value="0.00" id="credit" readonly>
 													</div>         
@@ -117,7 +121,7 @@
 												<td></td>
 											</tr>
 											<tr>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<select id="location" name="location[]" class="form-control" data-placeholder="Select" required>
 															<option value=""></option>
@@ -126,10 +130,9 @@
 															?>
 																<optgroup label="<?php echo $region['region'];?>">
 																		<?php  
-																			 // retrive locations under the above region ID
-																			 $locations = $locationObj->get(array('region'=>$region['id']));
-																			 //foreach($location_id as $user_loc);
+																			 $locations = $entryLocations;
 																			 foreach ($locations as $location):
+																			 if ((int) $location['region'] !== (int) $region['id']) continue;
 																			 $selected_act =($location['id']==$location_id)?'selected':'';
 																		 ?>
 																		 <option value="<?php echo $location['id']; ?>" <?php echo $selected_act;?> >
@@ -145,7 +148,7 @@
 														</select>
 													</div>
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<select id="head" name="head[]" class="form-control tr_head" data-placeholder="Select" required >
 															<option value=""></option>
@@ -159,19 +162,19 @@
 														</select>
 													</div>
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<select id="sub_head" name="sub_head[]" class="form-control" data-placeholder="Select" required >
 															<option value=""></option>
 														</select>
 													</div>
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<input type="text" class="form-control" name="debit[]"  value="" id="debit" >
 													</div>         
 												</td>
-												<td class="col-lg-2">
+												<td>
 													<div class="form-group">
 														<input type="text" class="form-control" name="credit[]"  value="" id="credit" >
 													</div>         

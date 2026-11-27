@@ -5,9 +5,11 @@
 $this->headTitle($this->title);
 ?>
 <?php
-	$minYearTs = !empty($minYear) ? strtotime((string) $minYear) : false;
-	$minYear = ($minYearTs !== false) ? date('Y', $minYearTs) : date('Y');
-?> 
+$minYearTimestamp = !empty($minYear) ? strtotime((string) $minYear) : false;
+$minYear = ($minYearTimestamp !== false) ? date('Y', $minYearTimestamp) : date('Y');
+$selectedYear = !empty($data['year']) ? (int) $data['year'] : (int) date('Y');
+$selectedMonth = !empty($data['month']) ? (int) $data['month'] : (int) date('n');
+?>
 <div class="card">
 	<div class="card-header">
 		<div class="row">
@@ -18,7 +20,7 @@ $this->headTitle($this->title);
 						<option value=""></option>
 						<?php 
 							for($year=date('Y');$year>=$minYear;$year--):
-								$selected = ($year == $data['year'])?"selected":"";
+								$selected = ($year == $selectedYear)?"selected":"";
 						?>
 							<option value="<?php echo $year;?>" <?php echo $selected;?> >
 								<?php echo $year;?> 
@@ -30,7 +32,7 @@ $this->headTitle($this->title);
 					<label class="control-label" for="month">Month</label>
 					<select class="form-control" id="month" name="month" data-placeholder="Select" onchange='this.form.submit()'>
 						<?php for($month=1; $month<=12; $month++):?>
-							<?php $selected = ($month == $data['month'])?'selected':'';?>
+							<?php $selected = ($month == $selectedMonth)?'selected':'';?>
 							<option value="<?php echo $month;?>" <?php echo $selected; ?>>
 								<?php echo DateTime::createFromFormat('!m', $month)->format('F');?>
 							</option> 

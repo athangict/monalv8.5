@@ -76,9 +76,10 @@ endforeach;?>
 								<th>Rate</th>
 								<th>Quantity</th>
 								<th>Amount</th>
+								<th>GST</th>
 							</thead>
 							<tbody>
-							<?php $i=1; $total=0;foreach($saledetails as $saledetail): ?>
+							<?php $i=1; $total=0; $totalGst=(isset($gst_amount) ? (float)$gst_amount : 0); foreach($saledetails as $saledetail): ?>
 							<tr> 
 								<td><?php echo $i++;?></td>
 								<td><?php echo $this->itemObj->getColumn($saledetail['item'],'name');?></td>
@@ -87,21 +88,26 @@ endforeach;?>
 								<td><?php echo $saledetail['quantity'];?></td>
 								<td><?php $amt = $saledetail['rate'] * $saledetail['quantity'];
 								echo $total_amt = $amt - $saledetail['discount_qty'];?></td>
+								<td><?php echo number_format(isset($saledetail['gst_amount']) ? (float)$saledetail['gst_amount'] : 0, 2, '.', ',');?></td>
 							</tr>
 							<?php $total=$total+$amt;?>
 							<?php endforeach;?>
 							<tr>
-								<td colspan="5" style="text-align:right"><b class="red">Total Amount :</b></td>
-								<td colspan="2"><b><?php echo number_format($total, 2, '.', ',');?></b></td>
+								<td colspan="6" style="text-align:right"><b class="red">Total Amount :</b></td>
+								<td><b><?php echo number_format($total, 2, '.', ',');?></b></td>
 							</tr>
 							<tr>
-								<td colspan="5" style="text-align:right"><b class="red">Discount :</b></td>
-								<td colspan="2"><b> <?php echo number_format($discount, 2, '.', ',');?>%</b></td>
+								<td colspan="6" style="text-align:right"><b class="red">Discount :</b></td>
+								<td><b> <?php echo number_format($discount, 2, '.', ',');?>%</b></td>
 							</tr>
 							<tr>
-								<td colspan="5" style="text-align:right"><b class="red">Net Amount :</b></td>
-
-								<td colspan="2"><b> <?php if($discount == 0){echo $total;}else{echo  number_format($total-($total*($discount/100)), 2, '.', ','); }?></b></td>
+								<td colspan="6" style="text-align:right"><b class="red">GST :</b></td>
+								<td><b><?php echo ($totalGst > 0) ? number_format($totalGst, 2, '.', ',') : 'Not Applicable';?></b></td>
+							</tr>
+							<tr>
+								<td colspan="6" style="text-align:right"><b class="red">Net Amount :</b></td>
+								<?php $discountAmount = ($discount > 0) ? ($total * ($discount/100)) : 0; $totalAfterDiscount = $total - $discountAmount; $netAmount = $totalAfterDiscount + $totalGst; ?>
+								<td><b> <?php echo number_format($netAmount, 2, '.', ',');?></b></td>
 							</tr>
 						</tbody>
 						</table>	
@@ -112,7 +118,7 @@ endforeach;?>
 					<tr>
 						<td>
 					<p>Amount chargeable(in words)<br>
-					<strong>Ngultrum <?php $readASword = $wordformat->format($total-($total*($discount/100)));echo $readASword. ' only /-'?></strong></p> 
+					<strong>Ngultrum <?php $discountAmount = ($discount > 0) ? ($total * ($discount/100)) : 0; $totalAfterDiscount = $total - $discountAmount; $netAmount = $totalAfterDiscount + $totalGst; $readASword = $wordformat->format($netAmount);echo $readASword. ' only /-'?></strong></p> 
 							</td>		</tr></table>
 				</div>
 				<div class="row" id="convert-tb0">

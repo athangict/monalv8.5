@@ -5,6 +5,24 @@
  */
 	$this->headTitle($this->title);
 ?>
+<style>
+@media (min-width: 1200px) {
+	.asset-report-filters {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+	}
+	.asset-report-filters .asset-report-filter {
+		flex: 1 1 145px;
+		width: auto;
+		min-width: 0;
+	}
+	.asset-report-filters .asset-report-submit {
+		flex: 0 0 auto;
+		width: auto;
+	}
+}
+</style>
 <div class="card">
     <div class="card-header">
 	    <div class="red fa fa-graph">
@@ -14,8 +32,8 @@
 	<div class="card-body">
 		<div class="col-lg-12">
 			<form id="#form" method="POST" action="<?php echo $this->url('areport', array('action' => 'report')); ?>" enctype="multipart/form-data" >    
-				<div class="row">
-					<div class="form-group col-lg-2">
+				<div class="row asset-report-filters">
+					<div class="form-group col-sm-4 asset-report-filter">
 						<label for="assettype" class="control-label">Asset Type</label>
 						<select class="form-control" name="assettype" id="assettype" data-placeholder="Select"  required>
 							<option value="-1">All</option>
@@ -27,7 +45,7 @@
 						<?php endforeach;?>
 						</select>
 					</div>
-					<div class="form-group col-lg-2">
+					<div class="form-group col-sm-4 asset-report-filter">
 						<label for="region" class="control-label">Region</label>
 						<select class="form-control" name="region" id="region" data-paceholder="Select">
 							<option value="-1">All</option>
@@ -40,7 +58,7 @@
 							<?php endforeach;?>									
 						</select>
 					</div> 
-					<div class="form-group col-lg-2">
+					<div class="form-group col-sm-4 asset-report-filter">
 						<label for="location" class="contol-label">Location</label>
 						<select class="form-control" name="location" id="location" data-placeholder="Select" >
 							<option value="-1">All</option>
@@ -55,7 +73,7 @@
 							endif;?>							
 						</select>
 					</div> 
-					<div class="form-group col-lg-2">
+					<div class="form-group col-sm-4 asset-report-filter">
 						<label for="custodian" class="contol-label">Custodian</label>
 						<select class="form-control" name="custodian" id="custodian" data-placeholder="Select" >
 							<option value="-1">All</option>
@@ -69,15 +87,17 @@
 							<?php endforeach;?>							
 						</select>
 					</div> 
-					<div class="form-group col-lg-2">
+					<div class="form-group col-sm-4 asset-report-filter">
 						<label for="status" class="control-label">status</label>
+						<?php
+							$statusSelection = $data['status'] ?? array();
+							if(!is_array($statusSelection)){
+								$statusSelection = array($statusSelection);
+							}
+						?>
 						<select multiple="" class="form-control" name="status[]" id="status" data-placeholder="Select" >
-									<option value="-1">All</option>
+									<option value="-1" <?php echo (in_array('-1', $statusSelection))?'selected':''; ?>>All</option>
 							<?php
-								$statusSelection = $data['status'] ?? array();
-								if(!is_array($statusSelection)){
-									$statusSelection = array($statusSelection);
-								}
 							foreach($this->statusObj->getarray([1,19,22,23]) as $sta):
 								$selected = (in_array($sta['id'] ,$statusSelection))?'selected':'';?>
 							<option value="<?php echo $sta['id'];?>"<?php echo $selected;?>>
@@ -86,17 +106,15 @@
 							<?php endforeach;?>
 						</select>
 					</div>
-					<div class="form-group col-lg-2">
+					<div class="form-group col-sm-4 asset-report-filter">
 						<label class="control-label" for="end_date">End Date</label>
 						<div class="date input-group" id="end_date" data-date="<?php echo $data['current_date'];?>" data-date-format="yyyy-mm-dd" >
 							<input class="form-control span2" name="end_date" id="end_date" type="text" placeholder="End Date" value="<?php echo $data['current_date'];?>" readonly required>
 							<span class="input-group-addon add-on"><i class="fa fa-calendar"></i></span>
 						</div>
 					</div>
-					<div class="form-group col-lg-1"><br>
-						<div class="col-lg-12">
-							<button type="submit" class="btn btn-sm btn-success pull-right"><i class="fa fa-gear"></i> Generate </button>
-						</div>
+					<div class="form-group col-sm-4 asset-report-submit">
+						<button type="submit" class="btn btn-sm btn-success"><i class="fa fa-gear"></i> Generate </button>
 					</div>
 				</div>
 			</form>
@@ -189,20 +207,25 @@
 				/*PREVIOUS-YEAR*/
 				//$previous_dep =$this->assetObj->getPreDep($row['id'],'previous_depreciated_amount');
 			   // foreach($previous_dep as $pre);
-				$acc_dep=$row['previous_depreciated_amount'];
+				$acc_dep=(float)($row['previous_depreciated_amount'] ?? 0);
 				$year=$current_year-1;
 				$previous_year_dep=$this->depreciationObj->getPreDepindividual($row['id'],$row['asset_type'],$year,'dep_amount');
-				foreach($previous_year_dep as $preyeardep);
+				$previous_year_dep_sum = 0.0;
+				foreach($previous_year_dep as $preyeardep):
+					$previous_year_dep_sum = (float)($preyeardep['totalpredepsum'] ?? 0);
+				endforeach;
 				if($current_year<=2024){
 					$opening=$acc_dep;
 				}
 				else{
-					$opening=$acc_dep+$preyeardep['totalpredepsum'];
+					$opening=$acc_dep+$previous_year_dep_sum;
 				}
 				
 				$current_dep=$this->depreciationObj->getCurrentDepIndividual($row['id'],$current_year,'dep_amount');
-				foreach($current_dep as $current);
-				$acc_dep_current=$current['totalcurrentsum'];//SUM OF Depreciation
+				$acc_dep_current = 0.0;
+				foreach($current_dep as $current):
+					$acc_dep_current = (float)($current['totalcurrentsum'] ?? 0);//SUM OF Depreciation
+				endforeach;
 				//$asset_opening=$opening+$acc_dep_current;
 				$net_value+=$actual_asset_value - ($opening + $acc_dep_current) ;
 				$net=$depreciable - ($opening + $acc_dep_current);
@@ -221,8 +244,8 @@
 					<td class="fw-bold"><?php echo number_format($row['salvage'],2);?></td>
 					<td class="fw-bold"><?php echo number_format($depreciable,2);?></td>
 					<td class="fw-bold"><?php echo number_format($row['dep_per_day'],2);?></td>
-					<td class="fw-bold"><?php echo $acc_dep=number_format($opening,2)?number_format($opening,2):'0.00';?></td>
-					<td class="fw-bold"><?php echo $acc_dep=number_format($acc_dep_current,2)?number_format($acc_dep_current,2):'0.00';?></td>
+					<td class="fw-bold"><?php echo number_format((float)$opening,2);?></td>
+					<td class="fw-bold"><?php echo number_format((float)$acc_dep_current,2);?></td>
 					<td class="fw-bold"><?php echo number_format($net,2);?></td>
 					<td class="fw-bold"><?php echo $this->status($row['status']);?></td>
 				</tr>

@@ -1,0 +1,237 @@
+<STYLE TYPE="text/css">
+TD{font-size:8pt;}
+</STYLE>
+<?php
+	$this->headTitle($this->title);	
+?>
+<?php echo $this->partial('stock/issue/partial.phtml', array('active' => 'issuereport')); ?><br/>
+<div class="pull-right tableTools-container"></div>		
+<div class="row">
+	<div class="col-lg-12">					
+		<form id="#form" method="post" action="<?php echo $this->url('inissue', array('action' => 'issuereport')); ?>"  enctype="multipart/form-data" >    
+			<div class="row">						
+				<div class="form-group col-lg-2">
+					<label class="control-label" for="item_group">Item Group</label>
+					<select class="form-control" name="item_group" id="item_group" data-placeholder="Select item group" required>
+						<?php $selected_item_group = ($data['item_group'] == '-1')?'selected':'';?>
+						<option value="-1" <?php echo $selected_item_group;?>>All</option>
+						<?php $groups = $this->groupObj->getAll();
+							foreach ($groups as $group):	
+							 $ig_selected = ($group['id'] == $data['item_group'])?"selected":"";									
+						?>
+							<option value="<?php echo $group['id']; ?>" <?php echo $ig_selected; ?>>
+								<?php echo $group['name']; ?>
+							</option>
+						<?php endforeach;?>
+					</select>
+				</div>
+				<div class="form-group col-lg-2">
+					<label class="control-label" for="source_location">Source Location</label>
+					<select class="form-control" name="source_location" id="source_location" data-placeholder="Source Location" required>
+						<?php $selected_sloc = ($data['source_location'] == '-1')?'selected':'';?>
+						<option value="-1" <?php echo $selected_sloc;?>>All</option>
+						<?php foreach ($admin_locs as $location):
+							$sloc_selected = ($location['id'] == $data['source_location'])?'selected':'';?>
+						 <option value="<?php echo $location['id']; ?>" <?php echo $sloc_selected;?>>
+							<?php echo $location['location']; ?>
+						 </option>
+						<?php endforeach; ?>	
+					</select>
+				</div>
+				<div class="form-group col-lg-2">
+					<label class="control-label" for="destination_location">Issued To</label>
+					<select class="form-control" name="destination_location" id="destination_location" data-placeholder="Issued To" required>
+						<?php $selected_dloc = ($data['destination_location'] == '-1')?'selected':'';?>
+						<option value="-1" <?php echo $selected_dloc; ?>>All</option>
+						<?php foreach ($this->employeeObj->getAll() as $employee):
+							$dloc_selected = ($employee['id'] == $data['destination_location'])?'selected':'';?>
+							<option value="<?php echo $employee['id']; ?>" <?php echo $dloc_selected;?>>
+								<?php echo $employee['full_name']; ?>
+							</option>
+						<?php endforeach; ?>	
+					</select>
+				</div>
+				<div class="col-lg-2">
+					<div class="form-group">
+						<label for="start_date" class="control-label">Start Date</label>
+						<div class="date input-group" id="start_date" data-date-format="yyyy-mm-dd" >
+							<input class="form-control span2" name="start_date" id="start_date" value="<?php echo $data['start_date'];?>" type="text" placeholder="Start Date" readonly required>
+							<span class="input-group-addon add-on"><i class="fa fa-calendar"></i></span>
+						</div>
+					</div>
+				</div>
+				<div class="col-lg-2">
+					<div class="form-group">
+						<label for="end_date" class="control-label">End Date</label>
+						<div class="date input-group" id="end_date" data-date-format="yyyy-mm-dd" >
+							<input class="form-control span2" name="end_date" id="end_date" value="<?php echo $data['end_date'];?>" type="text" placeholder="End Date" readonly required>
+							<span class="input-group-addon add-on"><i class="fa fa-calendar"></i></span>
+						</div>
+					</div>
+				</div>
+				<div class="col-lg-1"></div>
+				<div class="col-lg-1">
+					<div class="space-8"></div>
+					<button type="submit" class="btn btn-primary pull-right"><i class="fa fa-refresh"></i>Refresh</button>
+				</div>
+			</div>
+		</form>
+		<div class="table-header"><?php echo $this->title; ?></div>		
+		<table class="table table-striped table-bordered table-hover bafra-table-medium" id="dataTables">
+			<thead>
+				<tr>
+					<th>#</th>
+					<th>Challan No.</th>
+					<th>Issue Date</th>
+					<th>Item Group</th>
+					<th>Source</th>
+					<th>Issued To</th>
+					<th>Item</th>
+					<th>Uom</th>
+					<th>Issue Qty</th>
+                                        <th>Amount</th>
+				</tr>
+			</thead>
+			<tbody>
+				<?php $i = 1; 
+					$issues = $this->issueObj->getIssue($data['item_group'],$data['source_location'],$data['destination_location'],$data['start_date'],$data['end_date'],$admin_loc_ids);
+					foreach($issues as $row):
+						$itemGroupId = isset($row['detail_item_group']) ? (int)$row['detail_item_group'] : (isset($row['detail_item_group_stock']) ? (int)$row['detail_item_group_stock'] : (isset($row['item_group']) ? (int)$row['item_group'] : ((isset($data['item_group']) && $data['item_group'] != '-1') ? (int)$data['item_group'] : 0)));
+						$sourceLocationId = isset($row['from_location']) ? $row['from_location'] : (isset($row['source_location']) ? $row['source_location'] : 0);
+						$issuedToLocationId = isset($row['to_location']) ? $row['to_location'] : (isset($row['destination_location']) ? $row['destination_location'] : 0);
+						$issuedToEmployeeId = isset($row['received_by']) ? (int)$row['received_by'] : 0;
+						$itemId = isset($row['item']) ? (int)$row['item'] : (isset($row['item_id']) ? (int)$row['item_id'] : 0);
+						$uomId = isset($row['uom']) ? (int)$row['uom'] : (isset($row['uom_id']) ? (int)$row['uom_id'] : (isset($row['st_uom_id']) ? (int)$row['st_uom_id'] : 0));
+						$itemCode = isset($row['detail_item_code']) && $row['detail_item_code'] !== '' ? $row['detail_item_code'] : (isset($row['detail_item_code_stock']) ? $row['detail_item_code_stock'] : '-');
+						$itemName = isset($row['detail_item_name']) && $row['detail_item_name'] !== '' ? $row['detail_item_name'] : (isset($row['detail_item_name_stock']) ? $row['detail_item_name_stock'] : '');
+						if($itemId > 0):
+							if($itemCode === '' || $itemCode === '-' || $itemCode === null):
+								$itemCode = $this->itemObj->getColumn($itemId,'code');
+							endif;
+							if($itemName === '' || $itemName === null):
+								$itemName = $this->itemObj->getColumn($itemId,'name');
+							endif;
+							if($itemCode === '' || $itemCode === null):
+								$itemCode = $this->stockItemObj->getColumn($itemId,'code');
+							endif;
+							if($itemName === '' || $itemName === null):
+								$itemName = $this->stockItemObj->getColumn($itemId,'name');
+							endif;
+						endif;
+						if($itemCode === '' || $itemCode === null):
+							$itemCode = isset($row['item_code']) ? $row['item_code'] : '-';
+						endif;
+						if($itemName === '' || $itemName === null):
+							$itemName = isset($row['item_name']) ? $row['item_name'] : '';
+						endif;
+						$itemLabel = ($itemName !== '') ? $itemCode.' - '.$itemName : $itemCode;
+						$vehicleNo = isset($row['vehicle_no']) ? $row['vehicle_no'] : (isset($row['vehicle']) ? $row['vehicle'] : '-');
+					?>
+					<tr>
+					           <td><?php echo $i++; ?></td>
+					      <td><?php echo $row['challan_no']; ?></td>
+						  <td><?php echo $row['issue_date']; ?></td>
+						  <td>
+						  	<?php
+						  		if(isset($row['detail_group_name']) && $row['detail_group_name'] !== ''):
+						  			echo $row['detail_group_name'];
+						  		elseif(isset($row['detail_group_name_stock']) && $row['detail_group_name_stock'] !== ''):
+						  			echo $row['detail_group_name_stock'];
+						  		elseif(isset($row['header_group_name']) && $row['header_group_name'] !== ''):
+						  			echo $row['header_group_name'];
+						  		else:
+						  			echo ($itemGroupId) ? $this->groupObj->getColumn($itemGroupId,'name') : '-';
+						  		endif;
+						  	?>
+						  </td>
+						  <td><?php echo ($sourceLocationId) ? $this->locationObj->getColumn($sourceLocationId,'location') : '-'; ?></td>
+						  <td>
+						  	<?php
+						  		if($issuedToEmployeeId > 0):
+						  			echo $this->employeeObj->getColumn($issuedToEmployeeId,'full_name');
+						  		else:
+						  			echo ($issuedToLocationId) ? $this->locationObj->getColumn($issuedToLocationId,'location') : '-';
+						  		endif;
+						  	?>
+						  </td>
+						  <td><?php echo $itemLabel; ?></td>
+						  <td><?php echo ($uomId > 0) ? $this->uomObj->getColumn($uomId,'code') : '-'; ?></td>
+						  <td><?php echo number_format($row['quantity'], 2, '.', ','); ?></td>
+                                                  <td><?php echo number_format($row['amount'],2,'.',','); ?></td>
+					</tr>
+				<?php endforeach; ?>
+			</tbody>
+		</table>				
+	</div>
+</div>
+<script type="text/javascript">
+		$('document').ready(function(){
+			$('#dataTables').DataTable({"paging":   true,});
+		});
+		$(function() {
+			$('#start_date').datepicker();
+			$('#start_date').on('changeDate', function(){
+				$('form').formValidation('revalidateField', $(this).attr('id'));
+			});
+			$('#end_date').datepicker();
+			$('#end_date').on('changeDate', function(){
+				$('form').formValidation('revalidateField', $(this).attr('id'));
+		});
+		/*** Form Validation ***/
+	const fv = FormValidation.formValidation(document.getElementById('#form'), {
+		fields: {
+			item_group: {
+				validators: {
+					notEmpty: {
+						message: 'Please select item group'
+					}
+				}
+			},
+			from_location: {
+				validators: {
+					notEmpty: {
+						message: 'Please select source location'
+					}
+				}
+			},
+			to_location: {
+				validators: {
+					notEmpty: {
+						message: 'Please select destination location'
+					}
+				}
+			},
+			start_date: {
+				validators: {
+					notEmpty: {
+						message: 'Please select start date'
+					}
+				}
+			},
+			end_date: {
+				validators: {
+					notEmpty: {
+						message: 'Please select end date'
+					}
+				}
+			},
+		},
+		plugins: {
+			trigger: new FormValidation.plugins.Trigger(),
+			bootstrap3: new FormValidation.plugins.Bootstrap3(),
+			submitButton: new FormValidation.plugins.SubmitButton(),
+			defaultSubmit: new FormValidation.plugins.DefaultSubmit(),
+		},
+	}).on('core.element.validated', function (e) {
+		if (e.valid) {
+			$('div#'+ e.field.replace('[]','') +'_chosen').removeClass('is-invalid');
+			$('div#'+ e.field.replace('[]','') +'_chosen').addClass('is-valid');
+		} else {
+			$('div#'+ e.field.replace('[]','') +'_chosen').removeClass('is-valid');
+			$('div#'+ e.field.replace('[]','') +'_chosen').addClass('is-invalid');
+		}
+	});
+});
+</script>
+
+

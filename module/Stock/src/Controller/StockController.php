@@ -16,6 +16,7 @@ use Purchase\Model As Purchase;
 class StockController extends AbstractActionController
 {   
 	private $_container;
+	protected $_itemGroupColumnCache = array();
 	protected $_table; 		// database table 
     protected $_user; 		// user detail
     protected $_login_id; 	// logined user id
@@ -89,6 +90,153 @@ class StockController extends AbstractActionController
 		$this->_connection = $this->_container->get('Laminas\Db\Adapter\Adapter')->getDriver()->getConnection();
 
 	}
+
+	private function getAssetSubheads()
+	{
+		return $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('c.code' => 'ASSET'));
+	}
+
+	private function getSubheadsByClassCode($classCode)
+	{
+		$classCode = strtoupper(trim((string)$classCode));
+		$classCodes = array($classCode);
+		if($classCode === 'EXPENSE'):
+			$classCodes = array('EXPENSE', 'EXP');
+		elseif($classCode === 'INCOME'):
+			$classCodes = array('INCOME', 'INC');
+		elseif($classCode === 'INVENTORY'):
+			$classCodes = array('INVENTORY', 'INV', 'ASSET');
+		elseif($classCode === 'GST'):
+			$classCodes = array('GST', 'TAX', 'ASSET', 'EXPENSE', 'EXP');
+		endif;
+		$subheads = $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('c.code' => $classCodes));
+		if(sizeof($subheads) > 0):
+			$uniqueSubheads = array();
+			foreach($subheads as $subhead):
+				if(isset($subhead['id'])):
+					$uniqueSubheads[$subhead['id']] = $subhead;
+				endif;
+			endforeach;
+			if(sizeof($uniqueSubheads) > 0):
+				return array_values($uniqueSubheads);
+			endif;
+			return $subheads;
+		endif;
+		return $this->getDefinedTable(Accounts\SubheadTable::class)->getAll();
+	}
+
+	private function getSubheadMapByClassCode($classCode)
+	{
+		$map = array();
+		foreach($this->getSubheadsByClassCode($classCode) as $subhead):
+			$map[$subhead['id']] = $subhead['code'].' - '.$subhead['name'];
+		endforeach;
+		return $map;
+	}
+
+	private function hasItemGroupColumn($column)
+	{
+		if(isset($this->_itemGroupColumnCache[$column])):
+			return $this->_itemGroupColumnCache[$column];
+		endif;
+		$sql = "SHOW COLUMNS FROM `st_item_group` LIKE '".$column."'";
+		$columns = $this->_container->get('Laminas\Db\Adapter\Adapter')->query($sql, 'execute')->toArray();
+		$this->_itemGroupColumnCache[$column] = (sizeof($columns) > 0);
+		return $this->_itemGroupColumnCache[$column];
+	}
+
+	private function hasItemGroupFinanceTransactionColumn()
+	{
+		return $this->hasItemGroupColumn('finance_transaction');
+	}
+
+	private function getItemGroupIncomeColumn()
+	{
+		if($this->hasItemGroupColumn('fn_income')):
+			return 'fn_income';
+		endif;
+		if($this->hasItemGroupColumn('income')):
+			return 'income';
+		endif;
+		if($this->hasItemGroupColumn('income_transaction')):
+			return 'income_transaction';
+		endif;
+		return null;
+	}
+
+	private function getItemGroupExpenseColumn()
+	{
+		if($this->hasItemGroupColumn('fn_expense')):
+			return 'fn_expense';
+		endif;
+		if($this->hasItemGroupColumn('expense')):
+			return 'expense';
+		endif;
+		if($this->hasItemGroupColumn('expense_transaction')):
+			return 'expense_transaction';
+		endif;
+		return null;
+	}
+
+	private function getItemGroupInventoryColumn()
+	{
+		if($this->hasItemGroupColumn('fn_inventory')):
+			return 'fn_inventory';
+		endif;
+		if($this->hasItemGroupColumn('inventory')):
+			return 'inventory';
+		endif;
+		if($this->hasItemGroupColumn('inventory_transaction')):
+			return 'inventory_transaction';
+		endif;
+		return null;
+	}
+
+	private function getItemGroupDiscountColumn()
+	{
+		if($this->hasItemGroupColumn('fn_discount')):
+			return 'fn_discount';
+		endif;
+		if($this->hasItemGroupColumn('discount')):
+			return 'discount';
+		endif;
+		if($this->hasItemGroupColumn('discount_rate')):
+			return 'discount_rate';
+		endif;
+		return null;
+	}
+
+	private function getItemGroupGstColumn()
+	{
+		if($this->hasItemGroupColumn('fn_gst')):
+			return 'fn_gst';
+		endif;
+		if($this->hasItemGroupColumn('gst')):
+			return 'gst';
+		endif;
+		if($this->hasItemGroupColumn('gst_rate')):
+			return 'gst_rate';
+		endif;
+		return null;
+	}
+
+	private function normalizeItemGroupFinancialColumns($itemgroups)
+	{
+		$incomeColumn = $this->getItemGroupIncomeColumn();
+		$expenseColumn = $this->getItemGroupExpenseColumn();
+		$inventoryColumn = $this->getItemGroupInventoryColumn();
+		$discountColumn = $this->getItemGroupDiscountColumn();
+		$gstColumn = $this->getItemGroupGstColumn();
+		foreach($itemgroups as &$itemgroup):
+			$itemgroup['income_value'] = ($incomeColumn && isset($itemgroup[$incomeColumn])) ? $itemgroup[$incomeColumn] : null;
+			$itemgroup['expense_value'] = ($expenseColumn && isset($itemgroup[$expenseColumn])) ? $itemgroup[$expenseColumn] : null;
+			$itemgroup['inventory_value'] = ($inventoryColumn && isset($itemgroup[$inventoryColumn])) ? $itemgroup[$inventoryColumn] : null;
+			$itemgroup['discount_value'] = ($discountColumn && isset($itemgroup[$discountColumn])) ? $itemgroup[$discountColumn] : null;
+			$itemgroup['gst_value'] = ($gstColumn && isset($itemgroup[$gstColumn])) ? $itemgroup[$gstColumn] : null;
+		endforeach;
+		unset($itemgroup);
+		return $itemgroups;
+	}
 	/**
 	 * Item Class Action
 	 */
@@ -126,7 +274,7 @@ class StockController extends AbstractActionController
 			endif;
 			return $this->redirect()->toRoute('stock',array('action' => 'itemclass'));
 		}
-		$ViewModel = new ViewModel();
+		$ViewModel = new ViewModel(array());
 		$ViewModel->setTerminal(True);
 		return $ViewModel;
 	}
@@ -175,12 +323,28 @@ class StockController extends AbstractActionController
 			$class_id = '-1';
 		}
 		$itemgroups = $this->getDefinedTable(Stock\ItemGroupTable::class) -> getByClass($class_id);
+		$itemgroups = $this->normalizeItemGroupFinancialColumns($itemgroups);
+		$incomeColumn = $this->getItemGroupIncomeColumn();
+		$expenseColumn = $this->getItemGroupExpenseColumn();
+		$inventoryColumn = $this->getItemGroupInventoryColumn();
 		
 		return new ViewModel( array(
 				'title' => "Item Group",
 				'class_id' => $class_id,
 				'itemgroups' => $itemgroups,
 				'itemclassObj' => $this->getDefinedTable(Stock\ItemClassTable::class),
+				'assetSubheadMap' => $this->getSubheadMapByClassCode('ASSET'),
+				'incomeSubheadMap' => $this->getSubheadMapByClassCode('INCOME'),
+				'expenseSubheadMap' => $this->getSubheadMapByClassCode('EXPENSE'),
+				'inventorySubheadMap' => $this->getSubheadMapByClassCode('INVENTORY'),
+				'discountSubheadMap' => $this->getSubheadMapByClassCode('EXPENSE'),
+				'gstSubheadMap' => $this->getSubheadMapByClassCode('GST'),
+				'hasItemGroupFinanceTransaction' => $this->hasItemGroupFinanceTransactionColumn(),
+				'hasItemGroupIncomeTransaction' => ($incomeColumn !== null),
+				'hasItemGroupExpenseTransaction' => ($expenseColumn !== null),
+				'hasItemGroupInventoryTransaction' => ($inventoryColumn !== null),
+				'hasItemGroupDiscount' => true,
+				'hasItemGroupGst' => true,
 		) );
 	}
 	/**
@@ -200,6 +364,29 @@ class StockController extends AbstractActionController
 					'created' =>$this->_created,
 					'modified' =>$this->_modified,
 			);
+			if($this->hasItemGroupFinanceTransactionColumn()):
+				$data['finance_transaction'] = (isset($form['finance_transaction']) && $form['finance_transaction'] != '') ? $form['finance_transaction'] : NULL;
+			endif;
+			$incomeColumn = $this->getItemGroupIncomeColumn();
+			$expenseColumn = $this->getItemGroupExpenseColumn();
+			$inventoryColumn = $this->getItemGroupInventoryColumn();
+			$discountColumn = $this->getItemGroupDiscountColumn();
+			$gstColumn = $this->getItemGroupGstColumn();
+			if($incomeColumn):
+				$data[$incomeColumn] = (isset($form['income']) && $form['income'] != '') ? $form['income'] : NULL;
+			endif;
+			if($expenseColumn):
+				$data[$expenseColumn] = (isset($form['expense']) && $form['expense'] != '') ? $form['expense'] : NULL;
+			endif;
+			if($inventoryColumn):
+				$data[$inventoryColumn] = (isset($form['inventory']) && $form['inventory'] != '') ? $form['inventory'] : NULL;
+			endif;
+			if($discountColumn):
+				$data[$discountColumn] = (isset($form['discount']) && $form['discount'] !== '') ? $form['discount'] : 0;
+			endif;
+			if($gstColumn):
+				$data[$gstColumn] = (isset($form['gst']) && $form['gst'] !== '') ? $form['gst'] : 0;
+			endif;
 			$data = $this->_safedataObj->rteSafe($data);
 			$result = $this->getDefinedTable(Stock\ItemGroupTable::class)->save($data);
 	
@@ -212,6 +399,18 @@ class StockController extends AbstractActionController
 		}
 		$ViewModel = new ViewModel(array(
 				'itemclasses' => $this->getDefinedTable(Stock\ItemClassTable::class)->getAll(),
+				'assetSubheads' => $this->getSubheadsByClassCode('ASSET'),
+				'incomeSubheads' => $this->getSubheadsByClassCode('INCOME'),
+				'expenseSubheads' => $this->getSubheadsByClassCode('EXPENSE'),
+				'inventorySubheads' => $this->getSubheadsByClassCode('INVENTORY'),
+				'discountSubheads' => $this->getSubheadsByClassCode('EXPENSE'),
+				'gstSubheads' => $this->getSubheadsByClassCode('GST'),
+				'hasItemGroupFinanceTransaction' => $this->hasItemGroupFinanceTransactionColumn(),
+				'hasItemGroupIncomeTransaction' => ($this->getItemGroupIncomeColumn() !== null),
+				'hasItemGroupExpenseTransaction' => ($this->getItemGroupExpenseColumn() !== null),
+				'hasItemGroupInventoryTransaction' => ($this->getItemGroupInventoryColumn() !== null),
+				'hasItemGroupDiscount' => true,
+				'hasItemGroupGst' => true,
 		));
 		$ViewModel->setTerminal(True);
 		return $ViewModel;
@@ -232,6 +431,29 @@ class StockController extends AbstractActionController
 					'item_class' => $form['itemclass'],
 					'modified' =>$this->_modified,
 			);
+			if($this->hasItemGroupFinanceTransactionColumn()):
+				$data['finance_transaction'] = (isset($form['finance_transaction']) && $form['finance_transaction'] != '') ? $form['finance_transaction'] : NULL;
+			endif;
+			$incomeColumn = $this->getItemGroupIncomeColumn();
+			$expenseColumn = $this->getItemGroupExpenseColumn();
+			$inventoryColumn = $this->getItemGroupInventoryColumn();
+			$discountColumn = $this->getItemGroupDiscountColumn();
+			$gstColumn = $this->getItemGroupGstColumn();
+			if($incomeColumn):
+				$data[$incomeColumn] = (isset($form['income']) && $form['income'] != '') ? $form['income'] : NULL;
+			endif;
+			if($expenseColumn):
+				$data[$expenseColumn] = (isset($form['expense']) && $form['expense'] != '') ? $form['expense'] : NULL;
+			endif;
+			if($inventoryColumn):
+				$data[$inventoryColumn] = (isset($form['inventory']) && $form['inventory'] != '') ? $form['inventory'] : NULL;
+			endif;
+			if($discountColumn):
+				$data[$discountColumn] = (isset($form['discount']) && $form['discount'] !== '') ? $form['discount'] : 0;
+			endif;
+			if($gstColumn):
+				$data[$gstColumn] = (isset($form['gst']) && $form['gst'] !== '') ? $form['gst'] : 0;
+			endif;
 			$data = $this->_safedataObj->rteSafe($data);
 			$result = $this->getDefinedTable(Stock\ItemGroupTable::class)->save($data);
 			if($result > 0):
@@ -241,9 +463,22 @@ class StockController extends AbstractActionController
 			endif;
 			return $this->redirect()->toRoute('stock',array('action' => 'itemgroup'));
 		}
+		$itemgroups = $this->normalizeItemGroupFinancialColumns($this->getDefinedTable(Stock\ItemGroupTable::class)->get($this->_id));
 		$ViewModel = new ViewModel(array(
-				'itemgroups' => $this->getDefinedTable(Stock\ItemGroupTable::class)->get($this->_id),
+				'itemgroups' => $itemgroups,
 				'itemclasses' => $this->getDefinedTable(Stock\ItemClassTable::class)->getAll(),
+				'assetSubheads' => $this->getSubheadsByClassCode('ASSET'),
+				'incomeSubheads' => $this->getSubheadsByClassCode('INCOME'),
+				'expenseSubheads' => $this->getSubheadsByClassCode('EXPENSE'),
+				'inventorySubheads' => $this->getSubheadsByClassCode('INVENTORY'),
+				'discountSubheads' => $this->getSubheadsByClassCode('EXPENSE'),
+				'gstSubheads' => $this->getSubheadsByClassCode('GST'),
+				'hasItemGroupFinanceTransaction' => $this->hasItemGroupFinanceTransactionColumn(),
+				'hasItemGroupIncomeTransaction' => ($this->getItemGroupIncomeColumn() !== null),
+				'hasItemGroupExpenseTransaction' => ($this->getItemGroupExpenseColumn() !== null),
+				'hasItemGroupInventoryTransaction' => ($this->getItemGroupInventoryColumn() !== null),
+				'hasItemGroupDiscount' => true,
+				'hasItemGroupGst' => true,
 		));
 		$ViewModel->setTerminal(True);
 		return $ViewModel;
@@ -392,6 +627,10 @@ class StockController extends AbstractActionController
 			}
 			$itemCode = $next_code_serial;
 			$form = $this->getRequest()->getPost();
+			$gstPercent = (isset($form['gst_enabled']) && $form['gst_enabled'] == '1') ? trim((string)$form['gst_rate']) : '0';
+			if ($gstPercent === '' || !is_numeric($gstPercent)) {
+				$gstPercent = '0';
+			}
 			$group = $this->getDefinedTable(Stock\ItemSubGroupTable::class)->getColumn($form['item_subgroup'],'item_group');		
 				$data1 = array(
 						'code'          	=> $form['item_code'],
@@ -407,7 +646,7 @@ class StockController extends AbstractActionController
 						'valuation'      	=> '1',
 						'supplier'      	=> '1',
 						'expiry_period' 	=> '0',
-						'bst'           	=> '0',
+						'gst'           	=> $gstPercent,
 						'transportation_charge'	=>'0',
 						'item_group'    	=> $group,
 						'barcode'			=> $form['barcode'],						
@@ -502,6 +741,7 @@ class StockController extends AbstractActionController
 			'locationtypes'=> $this->getDefinedTable(Administration\LocationTypeTable::class)->get(array('sales' => '1')),
 			'elcformula' => $this->getDefinedTable(Stock\CostingFormulaTable::class)->get(array('costing_type'=>1)),
 			'locationformula' => $this->getDefinedTable(Stock\CostingFormulaTable::class)->get(array('costing_type'=>2)),
+			'gstRates' => $this->getDefinedTable(Stock\GstRateTable::class)->getAll(),
 		));
 		$ViewModel->setTerminal(True);
 		return $ViewModel;
@@ -621,6 +861,10 @@ class StockController extends AbstractActionController
 	
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getPost();
+			$gstPercent = (isset($form['gst_enabled']) && $form['gst_enabled'] == '1') ? trim((string)$form['gst_rate']) : '0';
+			if ($gstPercent === '' || !is_numeric($gstPercent)) {
+				$gstPercent = '0';
+			}
 			if($form['item_status']==""){
 				$item_status = '0';
 			}else{
@@ -643,7 +887,7 @@ class StockController extends AbstractActionController
 					'valuation'      	=> '1',
 					'supplier'      	=> '1',
 					'expiry_period' 	=> '0',
-					'bst'           	=> '0',
+					'gst'           	=> $gstPercent,
 					'transportation_charge'	=>'0',
 					'barcode'			=> $form['barcode'],						
 					'item_code'			=> 0,
@@ -781,6 +1025,7 @@ class StockController extends AbstractActionController
 				'costingFormulaObj' => $this->getDefinedTable(Stock\CostingFormulaTable::class),
 				'locationtypes'=> $this->getDefinedTable(Administration\LocationTypeTable::class)->get(array('sales' => '1')),
 				'marginsObj'	 => $this->getDefinedTable(Stock\MarginTable::class),
+				'gstRates' => $this->getDefinedTable(Stock\GstRateTable::class)->getAll(),
 		));
 		$ViewModel->setTerminal(True);
 		return $ViewModel;

@@ -92,7 +92,7 @@
 											<th>Discount</th>
 											<th>Net Amount</th>
 											<th>GST Amount</th>
-											<th>Total Amount</th>
+											<th>Total</th>
 										
 										</tr>
 									</thead>
@@ -101,8 +101,8 @@
 											<td><?php echo $receipt_amt;?></td>
 											<td><?php echo $discount?></td>
 											<td><?php echo $net_amount?></td>
-											<td><?php echo $sup_gst?></td>
-											<td><?php echo $sup_total?></td>
+											<td><?php echo $supplier_gst?></td>
+											<td><?php echo $total?></td>
 										</tr>
 									</tbody>
 								</table>
@@ -110,70 +110,55 @@
 						</div>
 					</div>
 					<div class="row">
-						<div class="col-lg-2">
-							<label class="control-label" for="freight_party">Freight Party: </label>
-							<input class="form-control" name="freight_party" id="freight_party" value="<?php if($freight_party==-1){echo "";}else{echo $this->partyObj->getColumn($freight_party,'name');}?>" readonly>
+					<div class="col-lg-12" >
+								<table class="table" style="border-top:2px solid #ddd;">
+									<thead>
+										<tr>
+											<th>Party</th>
+											<th>Amount</th>
+											<th>GST Amount</th>
+											<th>Total</th>
+											<th>Ref No</th>
+											<th>Remarks</th>
+										
+										</tr>
+									</thead>
+									<tbody>
+									<?php foreach($paymentd as $paymentds):?>
+										<tr>
+											<td><?php echo $this->partyObj->getColumn($paymentds['party'],'name');?></td>
+											<td><?php echo $paymentds['amount']?></td>
+											<td><?php echo $paymentds['gst_amount']?></td>
+											<td><?php echo $paymentds['total']?></td>
+											<td><?php echo $paymentds['ref_no']?></td>
+											<td><?php echo $paymentds['remarks']?></td>
+										</tr>
+										<?php endforeach;?>
+									</tbody>
+								</table>
+							</div>
 						</div>
-						<div class="col-lg-2">
-							<label class="control-label" for="freight">Amount: </label>
-							<input class="form-control" name="freight" id="freight" value="<?php echo $freight;?>" readonly>
-						</div>
-						<div class="col-lg-2">
-							<label class="control-label" for="freight_gst">GST: </label>
-							<input class="form-control" name="freight_gst" id="freight_gst" value="<?php echo $freight_gst;?>" readonly>
-						</div>
-						<div class="col-lg-2">
-							<label class="control-label" for="freight_total">Total: </label>
-							<input class="form-control" name="freight_total" id="freight_total" value="<?php echo $freight_total;?>" readonly>
-						</div>
-						<div class="col-lg-2">	
-							<label class="control-label" for="freight_ref">Reference No: </label>
-							<input class="form-control" name="freight_ref" id="freight_ref" value="<?php echo $freight_ref;?>" readonly>
-						</div>
-					</div>
-					<div class="row">
-						<div class="col-lg-2">
-							<label class="control-label" for="tax_party">Tax Party: </label>
-							<input class="form-control" name="tax_party" id="tax_party" value="<?php if($tax_party==-1){echo "";}else{echo $this->partyObj->getColumn($tax_party,'name');}?>" readonly>
-						</div>
-						<div class="col-lg-2">
-							<label class="control-label" for="tax">Amount: </label>
-							<input class="form-control" name="tax" id="tax" value="<?php echo $tax;?>" readonly>
-						</div>
-						<div class="col-lg-2">
-							<label class="control-label" for="tax_gst">GST: </label>
-							<input class="form-control" name="tax_gst" id="tax_gst" value="<?php echo $tax_gst;?>" readonly>
-						</div>
-						<div class="col-lg-2">
-							<label class="control-label" for="tax_total">Total: </label>
-							<input class="form-control" name="tax_total" id="tax_total" value="<?php echo $tax_total;?>" readonly>
-						</div>
-						<div class="col-lg-2">
-							<label class="control-label" for="tax_ref">Reference No: </label>
-							<input class="form-control" name="tax_ref" id="tax_ref" value="<?php echo $tax_ref;?>" readonly>
-						</div>
-					</div>
+						
 					<br><br>
 					<div class="row">
-						<div class="col-lg-4"></div>
-						<div class="col-lg-2">
-							<label class="control-label" for="gross">Total: </label>
-							<input class="form-control" name="gross" id="gross" value="<?php echo $total;?>" readonly>
+						<div class="col-lg-3"></div>
+						<div class="col-lg-3">
+							<label class="control-label" for="tot_amount">Total amount: </label>
+							<input class="form-control" name="tot_amount" id="tot_amount" value="<?php echo $tot_amount;?>" readonly>
 						</div>
-						<div class="col-lg-2">
+						<div class="col-lg-3">
 							<label class="control-label" for="gross">Total GST: </label>
-							<input class="form-control" name="gross" id="gross" value="<?php echo $total_gst;?>" readonly>
-						</div>
-						<div class="col-lg-2">
+							<input class="form-control" name="total_gst" id="total_gst" value="<?php echo $total_gst;?>" readonly>
+						</div><div class="col-lg-3">
 							<label class="control-label" for="gross">Grand Total: </label>
-							<input class="form-control" name="gross" id="gross" value="<?php echo $grand_tot;?>" readonly>
+							<input class="form-control" name="gross" id="gross" value="<?php echo $grand_total;?>" readonly> 
 						</div>
 					</div>
 					<br>
 					<div class="row">
 						<div class="col-lg-12" style="text-align: right">		
 							<?php $role = $this->userTable->getColumn($userID,'role');?>
-							<?php if($status == '2' &&  $user_locs == $location):?>
+							<?php if($status == '2' &&  $userID == $author):?>
 									<a href="<?php echo $this->url('billing', array('action'=>'editbill', 'id'=>$id));?>" class="btn btn-info"> <i class="fa fa-pencil"></i> Edit </a>
 									<a data-toggle="modal" data-target="#modal" href="<?php echo $this->url('billing', array('action'=>'processbill', 'id'=>$id.'-1'));?>" class="btn btn-success">
 									  <i class="fa fa-check-square-o"></i> Send Bill
@@ -197,9 +182,69 @@
 	</div>
 </div>
 <script type="text/javascript">
-	/*$('#print').genpdfinvoice({
-		content: '#report-print',
-		src:"<?php echo $this->url('pdfxls', array('action' => 'pdf'));?>",
-		orentation:"P",//L =landscape, P = potrait
-	});*/
+$(document).ready(function () {
+	$('#print').on('click', function(e){
+		e.preventDefault();
+		var reportdom = $('#report-print').clone(true);
+		var pdfStyle = '<style>' +
+			'#pdf-summary, #pdf-summary td {border:none !important;}' +
+			'table.table, table.table th, table.table td {border-color:#ddd !important;}' +
+			'table.table th, table.table td {border-width:1px !important; border-style:solid !important;}' +
+			'.red {color:#000 !important;}' +
+		'</style>';
+		reportdom.prepend(pdfStyle);
+		var leftSummaryHtml = reportdom.find('#convert-tb1').html() || '';
+		var rightSummaryHtml = reportdom.find('#convert-tb2').html() || '';
+
+		reportdom.find('#convert-tb0').replaceWith(
+			'<div style="height:8px;"></div>' +
+			'<table id="pdf-summary" width="100%" style="width:100%;border-collapse:collapse;border:none;">' +
+				'<tr>' +
+					'<td width="65%" style="width:65%;text-align:left;vertical-align:top;padding:8px;border:none;">' + leftSummaryHtml + '</td>' +
+					'<td width="35%" style="width:35%;text-align:left;vertical-align:top;padding:8px;">' + rightSummaryHtml + '</td>' +
+				'</tr>' +
+			'</table>'
+		);
+
+		reportdom.find('i').remove();
+		reportdom.find('.red').removeClass('red');
+		reportdom.find('ul').css({'list-style':'none','margin':'0','padding':'0'});
+		reportdom.find('li').css({'margin':'0 0 4px 0','padding':'0'});
+		reportdom.find('.row').css({'margin':'0'});
+		reportdom.find('[class*="col-"]').css({'padding':'0','margin':'0'});
+		reportdom.find('table').css({
+			'width':'100%',
+			'max-width':'100%',
+			'border-collapse':'collapse',
+			'table-layout':'fixed'
+		});
+		reportdom.find('th, td').css({
+			'border':'1px solid #ddd',
+			'padding':'4px',
+			'word-break':'break-word'
+		});
+		reportdom.find('#pdf-summary, #pdf-summary td').css({'border':'none'});
+		reportdom.find('div').each(function(){
+			var $this = $(this);
+			if($this.hasClass('space-6') && $this.html().replace(/\s|&nbsp;/g, '').length === 0){
+				$this.remove();
+				return;
+			}
+			$this.has('div').contents().unwrap();
+		});
+
+		$('#report_form').remove();
+		var form = "<form id='report_form' method='post' action='<?php echo $this->url('print', array('action' => 'index'));?>' target='iframe'>"+
+			"<input type='hidden' name='dom'/>"+
+			"<input type='hidden' name='title' value='report'/>"+
+			"<input type='hidden' name='orentation' value='P'/>"+
+			"<input type='hidden' name='size' value='A4'/>"+
+			"<input type='hidden' name='hide_header' value='1'/>"+
+			"</form>";
+		$('body').append(form);
+		$('#report_form input[name=dom]').val($.trim(reportdom.html()));
+		$('#report_form input[name=title]').val($(document).find('title').text());
+		$('#report_form').trigger('submit');
+	});
+});
 </script>

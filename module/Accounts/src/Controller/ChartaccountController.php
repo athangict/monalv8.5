@@ -690,8 +690,14 @@ class ChartaccountController extends AbstractActionController
 		$this->init();
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getPost();
+			$partyMode = $this->parsePartyRoleMode($form['party_mode'] ?? '0');
+			if($partyMode === null){
+				$this->flashMessenger()->addMessage("Failed^ Invalid Party Role mode");
+				return $this->redirect()->toRoute('chartaccount', array('action'=>'partyrole'));
+			}
 			$data = array(
 				'role' => $form['role'],
+				'credit' => $partyMode,
 				'author' =>$this->_author,
 				'created' =>$this->_created,
 				'modified' =>$this->_modified,
@@ -720,9 +726,15 @@ class ChartaccountController extends AbstractActionController
 		if($this->getRequest()->isPost())
 		{
 			$form=$this->getRequest()->getPost();
+			$partyMode = $this->parsePartyRoleMode($form['party_mode'] ?? '0');
+			if($partyMode === null){
+				$this->flashMessenger()->addMessage("Failed^ Invalid Party Role mode");
+				return $this->redirect()->toRoute('chartaccount', array('action'=>'partyrole'));
+			}
 			$data=array(
 				'id' => $this->_id,
 				'role' => $form['role'],
+				'credit' => $partyMode,
 				'author' =>$this->_author,
 				'modified' =>$this->_modified,
 			);
@@ -741,6 +753,12 @@ class ChartaccountController extends AbstractActionController
 		$ViewModel->setTerminal(True);
 		return $ViewModel;
 	} 
+
+	private function parsePartyRoleMode($value): ?int
+	{
+		return in_array($value, array('0', '1', '2'), true) ? (int)$value : null;
+	}
+
 	/**
 	 *  subhead action
 	 */

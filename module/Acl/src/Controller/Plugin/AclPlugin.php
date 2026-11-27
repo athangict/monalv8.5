@@ -105,20 +105,24 @@ class AclPlugin extends AbstractPlugin
 			if(substr($actionName, 0, 3)=='get'){
 				$count = '1';
 			}else{
-				$acl_row='0'; 
+				$acl_row = null; 
 				$resQuery = "SELECT `id`,`system` FROM `sys_acl` WHERE `route`='".$routeName."' AND `action`='".$actionName."' AND `resource` IN (SELECT `resource` FROM `sys_acl` WHERE `route`='".$routeName."')";
 				$res_stmt = $this->dbAdapter->query($resQuery);
 				$acl_resource = $res_stmt->execute();
 				foreach($acl_resource as $acl_row);
-				$acl_id = $acl_row['id'];
-				if($acl_row['system']=='1'){
-					$count = '1';
+				if(!is_array($acl_row) || !isset($acl_row['id'])){
+					$count = '0';
 				}else{
-					$count_query = "SELECT COUNT(*) as `count` FROM `sys_role_acl` WHERE `acl`=".$acl_id." AND `role` IN ($user_role)";
-					$count_stmt = $this->dbAdapter->query($count_query);
-					$count_result = $count_stmt->execute(); 
-					foreach($count_result as $count_row);
-					$count = $count_row['count'];
+					$acl_id = $acl_row['id'];
+					if(isset($acl_row['system']) && $acl_row['system']=='1'){
+						$count = '1';
+					}else{
+						$count_query = "SELECT COUNT(*) as `count` FROM `sys_role_acl` WHERE `acl`=".$acl_id." AND `role` IN ($user_role)";
+						$count_stmt = $this->dbAdapter->query($count_query);
+						$count_result = $count_stmt->execute(); 
+						foreach($count_result as $count_row);
+						$count = $count_row['count'];
+					}
 				}
 			}
 		}

@@ -59,90 +59,108 @@
 							</div> 
 						</div>
 						<div class="row">
+							<div class="col-lg-3">
+								<div class="form-group">
+									<label class="control-label" for="is_asset_order">Asset Purchase</label>
+									<div>
+										<label><input type="checkbox" id="is_asset_order" name="is_asset_order" value="1"> Asset</label>
+									</div>
+								</div>
+							</div>
+						</div>
+						<div class="row">
 							<div class="col-lg-12"> 
 								<h4>Purchase Order Details</h4>
 								<div>
-								<table id="purchase_field" class="table small-padding">
-								<tbody>
-									<tr>
-									<td class="col-lg-2 input-cell">
-											<div class="form-group">
-											<label for="item_class" class="control-label">Item Class</label>
-												<select class="form-control tr_item_class" name="item_class[]" id="item_class" data-placeholder="Select">
-													<option value=""></option>
-													<?php foreach($itemcls as $itemclass):?>
-													<option value="<?php echo $itemclass['id'];?>"><?php echo $itemclass['item_class'];?>
-													</option>
-													<?php endforeach;?>
-												</select> 
-											</div>
-										</td>
-										<td class="col-lg-2 input-cell">
-											<div class="form-group" id="item_container">
-											<label for="item" class="control-label">Item</label>
-												<select class="form-control tr_item" name="item[]" id="item" data-placeholder="Select">
-													<option value="0"></option>
-													<!-- <?php foreach($item as $items):?>
-													<option value="<?php echo $items['id'];?>"><?php echo $items['name'];?>
-													</option>
-													<?php endforeach;?> -->
-												</select> 
-											</div>
-											<div class="form-group" id="asst_container" style="display:none;">
-											<label for="item_name" class="control-label">Item</label>
-												<input class="form-control tr_item_name" name="item_name[]" id="item_name" data-placeholder="Select" value="null">
-											</div>
-										</td>
-										<td class="col-lg-2 input-cell">
-											<div class="form-group">
-											<label for="subhead" class="control-label">Subhead</label>
-												<select id="subhead" name="subhead[]" class="form-control tr_subhead" data-placeholder="Select">
-													<option value=""></option>
-												</select>
-											</div>
-										</td>
-										<td class="col-lg-2 input-cell">
-											<div class="form-group">
-											<label for="basic_uom" class="control-label">Unit of Measurement</label>
-												<select id="uom" name="uom[]" class="form-control tr_uom" data-placeholder="Select" >
-													<option value="1"></option>
-												</select>
-											</div>
-										</td>
-										<td class="col-lg-1 input-cell">
-											<div class="form-group">
-											<label for="quantity" class="control-label">Quantity</label>
-												<input type="text" class="form-control tr_quantity" name="quantity[]" id="quantity"  required/>
-											</div>
-										</td>
-										<td class="col-lg-1 input-cell">
-											<div class="form-group">
-											<label for="rate" class="control-label">Rate</label>
-												<input type="text" class="form-control tr_rate" name="rate[]" id="rate"  required/>
-											</div>         
-										</td>
-										<td class="col-lg-1 input-cell">
-											<div class="form-group">
-											<label for="amount" class="control-label">Amount</label>
-												<input type="text" class="form-control tr_amount" name="amount[]" id="amount" value="0.00" readonly/>
-											</div>         
-										</td>
-										<td class="col-lg-2 input-cell">
-											<div class="form-group">
-											<label for="remarks" class="control-label">Remarks</label>
-												<input type="text" class="form-control tr_remarks" placeholder="Remarks" name="remarks[]" id="remarks"/>
-											</div>
-										</td>
-										<!-- <td>
-										    <br>
-											<button class="btn btn-sm btn-success" type="button"  onclick="purchase_field();"> <span class="fa fa-plus-square" aria-hidden="true"></span> </button>
-										</td> -->
-									</tr> 
-								</tbody>
-								<table>
-								<div class="row"> 
-									<div class="col-lg-11"></div>
-									<button class="btn btn-xs btn-success" type="button"  onclick="purchase_field();"> <span class="fa fa-plus-square" aria-hidden="true"> Add Row</span> </button>
+								<table id="purchase_field" class="table table-bordered small-padding" style="table-layout:fixed; width:100%;">
+									<colgroup>
+										<col style="width:10%;">
+										<col style="width:18%;">
+										<col style="width:14%;">
+										<col style="width:14%;">
+										<col style="width:8%;">
+										<col style="width:8%;">
+										<col style="width:10%;">
+										<col style="width:14%;">
+										<col style="width:4%;">
+									</colgroup>
+									<thead>
+										<tr>
+											<th>Item Class</th>
+											<th>Item</th>
+											<th>Subhead</th>
+											<th>Unit of Measurement</th>
+											<th>Quantity</th>
+											<th>Rate</th>
+											<th>Amount</th>
+											<th>Remarks</th>
+											<th></th>
+										</tr>
+									</thead>
+									<tbody>
+										<tr>
+											<td>
+												<div class="form-group">
+													<select class="form-control tr_item_class" name="item_class[]" id="item_class" data-placeholder="Select">
+														<option value=""></option>
+														<?php foreach($itemcls as $itemclass):?>
+														<option value="<?php echo $itemclass['id'];?>"><?php echo $itemclass['item_class'];?>
+														</option>
+														<?php endforeach;?>
+													</select> 
+													<span class="asset-class-label" style="display:none;">Asset</span>
+												</div>
+											</td>
+											<td>
+												<div class="form-group item_container">
+													<select class="form-control tr_item" name="item[]" id="item" data-placeholder="Select">
+														<option value="0"></option>
+													</select> 
+												</div>
+												<div class="form-group asst_container" style="display:none;">
+													<input class="form-control tr_item_name" name="item_name[]" id="item_name" data-placeholder="Enter item name" value="">
+												</div>
+											</td>
+											<td>
+												<div class="form-group">
+													<select id="subhead" name="subhead[]" class="form-control tr_subhead" data-placeholder="Select">
+														<option value=""></option>
+													</select>
+												</div>
+											</td>
+											<td>
+												<div class="form-group">
+													<select id="uom" name="uom[]" class="form-control tr_uom" data-placeholder="Select" >
+														<option value="1"></option>
+													</select>
+												</div>
+											</td>
+											<td>
+												<div class="form-group">
+													<input type="text" class="form-control tr_quantity" name="quantity[]" id="quantity" required/>
+												</div>
+											</td>
+											<td>
+												<div class="form-group">
+													<input type="text" class="form-control tr_rate" name="rate[]" id="rate" required/>
+												</div>         
+											</td>
+											<td>
+												<div class="form-group">
+													<input type="text" class="form-control tr_amount" name="amount[]" id="amount" value="0.00" readonly/>
+												</div>         
+											</td>
+											<td>
+												<div class="form-group">
+													<input type="text" class="form-control tr_remarks" placeholder="Remarks" name="remarks[]" id="remarks"/>
+												</div>
+											</td>
+											<td class="po-row-action"></td>
+										</tr> 
+									</tbody>
+								</table>
+								<div class="text-right">
+									<button class="btn btn-xs btn-success" type="button" onclick="purchase_field();"><span class="fa fa-plus-square" aria-hidden="true"> Add Row</span></button>
 								</div>
 									<div class="clear"></div>
 								</div>
@@ -179,35 +197,175 @@
 
 <script type="text/javascript">	 
 var room = 1;
+	var assetClassId = '33';
+	function isAssetModeEnabled(){
+		return $('#is_asset_order').is(':checked');
+	}
+	function initPurchaseChosen(scopeObj){
+		if(!(window.jQuery && $.fn && $.fn.chosen)){
+			return;
+		}
+		var selects = $(scopeObj).find('select');
+		selects.each(function(){
+			if($(this).data('chosen')){
+				$(this).chosen('destroy');
+			}
+		});
+		selects.chosen({
+			width: '100%',
+			disable_search_threshold: 0
+		});
+	}
+	function reset_purchase_row(rowObj){
+		rowObj.find('.tr_item_class').val('').trigger('chosen:updated').trigger('change');
+		rowObj.find('.tr_item').html('<option value="0"></option>').val('0').trigger('change');
+		rowObj.find('.tr_subhead').html("<option value=''></option>").trigger('chosen:updated');
+		rowObj.find('.tr_uom').html("<option value='1'></option>").trigger('chosen:updated');
+		rowObj.find('.tr_quantity').val('');
+		rowObj.find('.tr_rate').val('');
+		rowObj.find('.tr_amount').val('0.00');
+		rowObj.find('.tr_remarks').val('');
+		rowObj.find('.tr_item_name').val('');
+		rowObj.find('.asst_container, #asst_container').hide();
+		rowObj.find('.item_container, #item_container').show();
+		rowObj.find('.asset-class-label').hide();
+		if(isAssetModeEnabled()){
+			applyAssetModeToRow(rowObj, true);
+		}
+		calculateTotalAmount();
+	}
+	function loadAssetSubheadAndUom(rowObj){
+		var subheadElement = rowObj.find('.tr_subhead');
+		var uomElement = rowObj.find('.tr_uom');
+		$.post(
+			"<?php echo $this->url('purorder', array('action' => 'getsubhead')); ?>",
+			{
+				isAsset: 1
+			},
+			function(data) {
+				subheadElement.html(data.subheadlist);
+				subheadElement.trigger('chosen:updated');
+			},
+			'json'
+		);
+		$.post(
+			"<?php echo $this->url('purorder', array('action' => 'getuom')); ?>",
+			{
+				isAsset: 1
+			},
+			function(data) {
+				uomElement.html(data.uom);
+				uomElement.trigger('chosen:updated');
+			},
+			'json'
+		);
+	}
+	function applyAssetModeToRow(rowObj, enabled){
+		var itemClass = rowObj.find('.tr_item_class');
+		var itemSelect = rowObj.find('.tr_item');
+		var itemNameInput = rowObj.find('.tr_item_name');
+		var itemContainer = rowObj.find('.item_container, #item_container');
+		var assetContainer = rowObj.find('.asst_container, #asst_container');
+		var assetLabel = rowObj.find('.asset-class-label');
+		if(enabled){
+			itemClass.val(assetClassId).trigger('chosen:updated');
+			itemClass.closest('.form-group').find('.chosen-container').hide();
+			itemSelect.prop('required', false);
+			itemNameInput.prop('required', true);
+			itemContainer.hide();
+			assetContainer.show();
+			assetLabel.show();
+			itemSelect.html('<option value="0"></option>').val('0').trigger('chosen:updated');
+			loadAssetSubheadAndUom(rowObj);
+		}else{
+			itemClass.closest('.form-group').find('.chosen-container').show();
+			itemSelect.prop('required', true);
+			itemNameInput.prop('required', false);
+			itemContainer.show();
+			assetContainer.hide();
+			assetLabel.hide();
+			rowObj.find('.tr_subhead').html("<option value=''></option>").trigger('chosen:updated');
+			rowObj.find('.tr_uom').html("<option value='1'></option>").trigger('chosen:updated');
+		}
+	}
+	function applyAssetModeToAllRows(){
+		var enabled = isAssetModeEnabled();
+		$('#purchase_field tbody tr').each(function(){
+			applyAssetModeToRow($(this), enabled);
+		});
+	}
+	function refresh_purchase_row_buttons(){
+		var rowCount = $('#purchase_field tbody tr').length;
+		$('#purchase_field tbody tr').each(function(){
+			var actionCell = $(this).find('.po-row-action');
+			if(rowCount > 1){
+				actionCell.html("<button class='btn btn-warning btn-xs po-row-remove' type='button' style='margin-top:5px;'><i class='fa fa-times'></i></button>");
+			}else{
+				actionCell.html("<button class='btn btn-warning btn-xs po-row-reset' type='button' style='margin-top:5px;'><i class='fa fa-refresh'></i></button>");
+			}
+		});
+	}
 	function purchase_field() {
     room++;
-    var objTo = document.getElementById('purchase_field');
+    var objTo = document.querySelector('#purchase_field tbody');
     var divtest = document.createElement('tr');
     divtest.setAttribute('class', 'form-group removeclass' + room);
     
     divtest.innerHTML = 
-    '<tr><td class="col-lg-2"><div class="form-group"><select name="item_class[]" class="form-control tr_item_class" data-placeholder="Select" required><option value="-1">Select</option><?php foreach($itemcls as $item): ?><option value="<?php echo $item['id']; ?>"><?php echo $item['item_class']; ?></option><?php endforeach; ?></select></div></td><td class="col-lg-2 input-cell"><div class="form-group" id="item_container"><select id="item" name="item[]" class="form-control tr_item" data-placeholder="Select" required><option value="0">Select</option></select></div><div class="form-group" id="asst_container" style="display:none;"><input class="form-control tr_item_name" name="item_name[]" id="item_name" data-placeholder="Select"></div></td><td class="col-lg-2 input-cell"><div class="form-group"><select id="subhead" name="subhead[]" class="form-control tr_subhead" data-placeholder="Select" required><option value=""></option></select></div></td><td class="col-lg-2 input-cell"><div class="form-group"><select id="uom" name="uom[]" class="form-control tr_uom" data-placeholder="Select" required><option value=1></option></select></div></td><td class="col-lg-1"><div class="form-group"><input type="text" class="form-control tr_quantity" id="quantity" name="quantity[]" value=""></div></td><td class="col-lg-1"><div class="form-group"><input type="text" class="form-control tr_rate" id="rate" name="rate[]" placeholder="rate"></div></td><td class="col-lg-1"><div class="form-group"><input type="text" class="form-control tr_amount" id="amount" name="amount[]" value="" readonly></div></td><td class="col-lg-2"><div class="form-group"><input type="text" class="form-control tr_remarks" id="remarks" placeholder="remarks" name="remarks[]"></div></td><td class="col-lg-1 input-cell"><div class="input-group-btn"><button class="btn btn-sm btn-danger" type="button" onclick="remove_purchase_field(' + room + ');"><span class="glyphicon-minus" aria-hidden="true"></span></button></div></td></tr>';
+    '<td class="col-lg-2"><div class="form-group"><select name="item_class[]" class="form-control tr_item_class" data-placeholder="Select" required><option value="-1">Select</option><?php foreach($itemcls as $item): ?><option value="<?php echo $item['id']; ?>"><?php echo $item['item_class']; ?></option><?php endforeach; ?></select><span class="asset-class-label" style="display:none;">Asset</span></div></td><td class="col-lg-2 input-cell"><div class="form-group item_container"><select name="item[]" class="form-control tr_item" data-placeholder="Select" required><option value="0">Select</option></select></div><div class="form-group asst_container" style="display:none;"><input class="form-control tr_item_name" name="item_name[]" data-placeholder="Enter item name"></div></td><td class="col-lg-2 input-cell"><div class="form-group"><select name="subhead[]" class="form-control tr_subhead" data-placeholder="Select" required><option value=""></option></select></div></td><td class="col-lg-2 input-cell"><div class="form-group"><select name="uom[]" class="form-control tr_uom" data-placeholder="Select" required><option value=1></option></select></div></td><td class="col-lg-1"><div class="form-group"><input type="text" class="form-control tr_quantity" name="quantity[]" value=""></div></td><td class="col-lg-1"><div class="form-group"><input type="text" class="form-control tr_rate" name="rate[]" placeholder="rate"></div></td><td class="col-lg-1"><div class="form-group"><input type="text" class="form-control tr_amount" name="amount[]" value="" readonly></div></td><td class="col-lg-2"><div class="form-group"><input type="text" class="form-control tr_remarks" placeholder="remarks" name="remarks[]"></div></td><td class="col-lg-1 input-cell po-row-action"></td>';
 	objTo.appendChild(divtest);
 		calculateTotalAmount()
-		$(divtest).find("#item").select2();
+		initPurchaseChosen(divtest);
+		applyAssetModeToRow($(divtest), isAssetModeEnabled());
+		refresh_purchase_row_buttons();
     
 	}
 	function remove_purchase_field(rid) {
 	$('.removeclass' + rid).remove();
 	calculateTotalAmount()
+	refresh_purchase_row_buttons();
 	
 	}
 	$(document).ready(function() {
-    // Initialize select2 on all current "item" dropdowns
-	var relatedItemElement = $(this).closest('tr').find('.tr_item');
-	relatedItemElement.select2({
-        placeholder: "Select an item",
-        allowClear: true
-    });
+	initPurchaseChosen($('#purchase_field'));
+	refresh_purchase_row_buttons();
+	$(document).on('click', '.po-row-remove', function() {
+		$(this).closest('tr').remove();
+		calculateTotalAmount();
+		refresh_purchase_row_buttons();
+	});
+	$(document).on('click', '.po-row-reset', function() {
+		reset_purchase_row($(this).closest('tr'));
+	});
+	$('#is_asset_order').on('change', function(){
+		applyAssetModeToAllRows();
+	});
+	applyAssetModeToAllRows();
 });
+	var loadRowSubhead = function(rowObj){
+		var selectedItem = rowObj.find('.tr_item').val();
+		var selectedClass = rowObj.find('.tr_item_class').val();
+		var relatedSubheadElement = rowObj.find('.tr_subhead');
+		$.post(
+			"<?php echo $this->url('purorder', array('action' => 'getsubhead')); ?>",
+			{
+				itemId: selectedItem,
+				itemclassId: selectedClass,
+			},
+			function(data) {
+				relatedSubheadElement.html(data.subheadlist);
+				relatedSubheadElement.trigger('chosen:updated');
+			},
+			'json'
+		);
+	};
 	$(document).on('change', '.tr_item', function() {
+		if(isAssetModeEnabled()){
+			return;
+		}
 		var selectedItem = $(this).val(); // get the value of the changed .tr_item
 		var relatedItemElement = $(this).closest('tr').find('.tr_uom'); // find the related .tr_uom in the same row
+		var rowObj = $(this).closest('tr');
 		
 		// Assuming you want to do an AJAX call similar to what you've shown in your initial code:
 		$.post(
@@ -222,27 +380,21 @@ var room = 1;
 			},
 			'json'
 		);  
+		loadRowSubhead(rowObj);
 	});
 
 	$(document).on('change', '.tr_item_class', function() {
+		if(isAssetModeEnabled()){
+			$(this).val(assetClassId).trigger('chosen:updated');
+			return;
+		}
 		var selectedClass = $(this).val(); // get the value of the changed .tr_item
 		var relatedItemElement = $(this).closest('tr').find('.tr_item'); // find the related .tr_item in the same row
 		var subheadElement = $(this).closest('tr').find('.tr_subhead');
-		var asst = $(this).closest('tr').find('#asst_container'); // find the related .tr_uom in the same row
-		var items = $(this).closest('tr').find('#item_container'); // find the related .tr_uom in the same row
-		$.post(
-			"<?php echo $this->url('purorder', array('action' => 'getsubhead')); ?>",
-			{
-				itemclassId: selectedClass,
-			},
-			function(data) {
-				console.log(data);
-				subheadElement.html(data.subheadlist); // updating the related .tr_uom
-				subheadElement.trigger('chosen:updated'); // if you're using chosen plugin
-				
-			},
-			'json'
-		);
+		var asst = $(this).closest('tr').find('.asst_container, #asst_container'); // find the related .tr_uom in the same row
+		var items = $(this).closest('tr').find('.item_container, #item_container'); // find the related .tr_uom in the same row
+		subheadElement.html("<option value=''></option>");
+		subheadElement.trigger('chosen:updated');
 		if(selectedClass==33){
 			asst.show();
 			items.hide();
@@ -261,6 +413,10 @@ var room = 1;
 				console.log(data);
 				relatedItemElement.html(data.item); // updating the related .tr_uom
 				relatedItemElement.trigger('chosen:updated'); // if you're using chosen plugin
+				var selectedItem = relatedItemElement.val();
+				if(selectedItem && selectedItem !== '0'){
+					loadRowSubhead(relatedItemElement.closest('tr'));
+				}
 				
 			},
 			'json'
@@ -272,6 +428,13 @@ var room = 1;
 		});
 	$(document).on('input', '.tr_rate, .tr_quantity', function() {
 		calculateTotal($(this));
+	});
+	$(document).on('blur', '.tr_rate', function() {
+		var rate = parseFloat($(this).val());
+		if (!isNaN(rate)) {
+			$(this).val(rate.toFixed(2));
+			calculateTotal($(this));
+		}
 	});
 	
 	function calculateTotal(element) {
@@ -388,3 +551,4 @@ $(function() {
 	//});
 });      
 </script>
+

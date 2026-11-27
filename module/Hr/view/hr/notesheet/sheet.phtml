@@ -5,7 +5,7 @@
  * 
  */
 $this->headTitle($this->title);
- $minYear = date('Y', strtotime($minYear)); 
+ $minYear = $minYear ? date('Y', strtotime($minYear)) : date('Y');
  
 ?>
 <?php echo $this->tabs_helper(array(959,988,990)); ?>
@@ -98,4 +98,3 @@ $this->headTitle($this->title);
 		$('#dataTables').DataTable({"paging":   true,});
 	});
 </script>
-

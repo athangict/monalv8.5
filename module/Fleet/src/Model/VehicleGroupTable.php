@@ -72,6 +72,7 @@ class VehicleGroupTable extends AbstractTableGateway
 	
 		$selectString = $sql->getSqlStringForSqlObject($select);
 		$results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();
+		$columns = null;
 	
 		foreach ($results as $result):
 		   $columns =  $result[$column];

@@ -1,0 +1,296 @@
+<?php
+/**
+ * 
+ * View -- of Stock/StockController/viewgoodsrequest
+ * 
+ */
+?>
+<?php echo $this->partial('stock/issue/partial.phtml', array('active' => 'issue')); ?> <br/>
+<?php 
+	foreach($issues as $issue):
+		extract($issue);
+		$issues_id = $id;
+		$issue_status = $status;
+	endforeach; 
+	$from_location = isset($from_location) ? $from_location : 0;
+	$to_location = isset($to_location) ? $to_location : 0;
+	$cost_center = isset($cost_center) ? $cost_center : 0;
+	$activity = isset($activity) ? $activity : 0;
+	$activity_id = ($cost_center > 0) ? $cost_center : $activity;
+	$issue_subhead = isset($sub_head) ? (int)$sub_head : 0;
+	$issue_subhead_label = '-';
+	if($issue_subhead > 0):
+		$selected_subheads = $this->subheadObj->get($issue_subhead);
+		foreach($selected_subheads as $selected_subhead):
+			$issue_subhead_label = implode(' | ', array($selected_subhead['class'], $selected_subhead['group'], $selected_subhead['head_type'], $selected_subhead['head'], $selected_subhead['sub_head']));
+			break;
+		endforeach;
+	endif;
+	$vehicle_no = isset($vehicle_no) ? $vehicle_no : '';
+	$tc_id = isset($tc_id) ? (int)$tc_id : 0;
+	$transaction_id = isset($transaction_id) ? $transaction_id : 0;
+	$subRoles = $this->userRoleObj->get(array('user'=>$this->userID, 'subrole'=>array('1','3','15','22'))); 
+	$depoyManager = $this->userRoleObj->get(array('user'=>$this->userID, 'subrole'=>array('9'))); 
+	if(sizeof($subRoles) > 0 || (sizeof($depoyManager)>0 && ($from_location == $this->user_location || $to_location == $this->user_location))){
+		/* checks whether the user is admin, CEO, FECD Manager || user belongs to source or Destination Location or depoy Manager */
+		$flag = true; 
+	}	
+	else{ 
+	   $flag = false; 
+	}
+?>
+<?php $this->headScript()->appendFile($this->basePath('js/ch_genpdf.js')); ?>
+<style>
+	.mytable tr th,.mytable tr td {
+		padding:5px;
+	}
+</style>
+<?php if($flag):  ?>
+<div class="row">
+	<div class="col-lg-12">
+		<div class="widget widget-box">
+			<div class="widget-header">
+				<h5 class="widget-title lighter smaller" style="max-width:70%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+					# Issue Details:
+					<strong>&nbsp;&nbsp;<?php echo $challan_no; ?> |
+					<?php echo ($activity_id > 0) ? $this->activityObj->getColumn($activity_id,'activity') : '-';?></strong>&nbsp;
+					<?php
+						$displayStatus = $issue_status;
+						$issuedStatusId = isset($issued_status_id) ? (int)$issued_status_id : 13;
+						if((string)$issue_status === '2' && (int)$transaction_id > 0 && $issuedStatusId > 0):
+							$displayStatus = $issuedStatusId;
+						endif;
+						$this->status($displayStatus);
+					?>
+				</h5>
+				<div class="widget-toolbar hidden-xs">
+					<?php if($issue_status == 3):?>
+						<button type="button" id="tc_btn" class="btn btn-white btn-success btn-bold btn-xs"><i class="fa fa-money"></i> Transportation Charge </button>
+					<?php endif;?>
+				</div>
+				<div class="widget-toolbar hidden-xs">
+				 <div class="btn-group">
+					<?php echo $this->button(6, "11-".$issues_id, 0, 3);?>
+					</div>
+					<a class="voucher-header-action btn btn-white btn-warning btn-bold btn-xs" title="Add New Issue"
+						href="<?php echo $this->url('inissue', array('action'=>'addissue')); ?>">
+						&nbsp;<i class="fa fa-plus"></i>&nbsp;
+					</a>
+					<a class="voucher-header-action btn btn-xs" id="print" title="Print">
+						<i class="ace-icon fa fa-file-pdf-o bigger-120"></i>
+					</a>
+				</div>	
+			</div>
+			<div class="widget-body">
+				<div class="widget-main padding-12">
+					<div id="report-print">
+						<div class="row" id="convert-tb0">
+							<div class="col-lg-8" id="convert-tb1">
+								<ul class="list-unstyled spaced">
+									<li>
+										<i class="ace-icon fa fa-caret-right blue"></i>
+										<b>Challan No. : </b> <?php echo $challan_no;?>
+									</li>
+									<li>
+										<i class="ace-icon fa fa-caret-right blue"></i>
+										<b>Source Location : </b><?php echo $from=$this->locationObj->getColumn($from_location,'location'); ?>
+									</li>
+									<li>
+										<i class="ace-icon fa fa-caret-right blue"></i>
+										<b> Activity  : </b><?php echo ($activity_id > 0) ? $this->activityObj->getColumn($activity_id,'activity') : '-'; ?>
+									</li>
+									<?php if($issue_status == 3 || $issue_status == 4 || $issue_status == 10):?>
+									<li>
+										<i class="ace-icon fa fa-caret-right blue"></i>
+							 			 <b>Received By : </b><?php echo $this->employeeObj->getColumn($received_by,'full_name');?>
+							 		</li>
+									<?php endif;?>
+								</ul>
+							</div>
+							<div class="col-lg-4" id="convert-tb2">
+								<ul class="list-unstyled spaced">
+									<li>
+										<i class="ace-icon fa fa-caret-right blue"></i>
+										 <b>Issuance Date : </b> <?php echo $issue_date; ?>
+									</li>
+									<li>
+										<i class="ace-icon fa fa-caret-right blue"></i>
+										<b>Issue To Employee : </b><?php echo $this->employeeObj->getColumn($received_by,'full_name'); ?>
+									</li>
+									<li>
+										<i class="ace-icon fa fa-caret-right blue"></i>
+										<b>Transaction Voucher No. : </b>
+										<?php if(($issue_status == 2 || $issue_status == 3 || $issue_status == 4 || $issue_status == 10) && $transaction_id > 0): ?>
+											<b class="red"><a target="_blank" href="<?php echo $this->url('transaction', array('action'=>'viewtransaction', 'id' => $transaction_id));?>"><?php echo $this->transactionObj->getColumn(array('id' => $transaction_id),'voucher_no');?> </a></b>
+										<?php else: ?>
+											<b class="red">On Issued</b>
+										<?php endif; ?>
+									</li>
+									<?php if($issue_status == 3 || $issue_status == 4 || $issue_status == 10):?>
+									<li>
+										<i class="ace-icon fa fa-caret-right blue"></i>
+							 			<b>Received On : </b><?php echo $received_on;?>
+							 		</li>
+									<?php endif;?>
+								</ul>
+							</div>
+						</div>
+						<div class="row">
+							<div class="col-lg-12">
+								<ul class="list-unstyled spaced">
+									<li>
+										<i class="ace-icon fa fa-caret-right blue"></i><b>Note: </b><?php echo $note;?> 
+									</li>
+								</ul>
+							</div>
+						</div>
+						<div class="space-6"></div>
+						<div class="row">
+							<div class="col-lg-12" >
+								<table class="table" style="border-top:2px solid #ddd;">
+									<thead>
+										<tr>
+											<th>#</th>
+											<th>Item</th>
+											<th>UOM</th>
+											<th>Stock Qty</th>
+											<th>Issued Qty</th>                     <th>Rate</th>
+											<?php if($issue_status == 3 || $issue_status == 4 || $issue_status == 10):?>
+											<th>Damaged Qty</th>
+											<th>Shortage Qty</th>
+											<th>Accepted Qty</th>
+											<th>Sound Qty</th>
+											<?php endif;?>
+											<th>Amount</th>
+											<th>Remarks</th>
+										</tr>
+									</thead>
+									<tbody>
+									<?php
+									    $i= 1;
+										$issue_details = $this->issue_detailsObj->get(array('issue'=>$issues_id)); 
+										if(sizeof($issue_details) == 0):
+									?>
+										<tr>
+											<td colspan="<?php echo ($issue_status == 3 || $issue_status == 4 || $issue_status == 10) ? 12 : 8; ?>" class="text-center">No issue details found.</td>
+										</tr>
+									<?php
+										else:
+											foreach($issue_details as $tdrow):
+											$itemName = isset($tdrow['item_id']) ? $this->itemObj->getColumn($tdrow['item_id'],'name') : '';
+											$itemName = ($itemName === '' || $itemName === null) ? (isset($tdrow['item']) ? $tdrow['item'] : '') : $itemName;
+					 				?>	
+											<tr>
+											    <td><?php echo $i++;?></td>
+												<td><?php echo $itemName;?></td>
+												<td><?php echo isset($tdrow['uom']) ? $this->uomObj->getColumn($tdrow['uom'],'code') : '';?></td>
+												<td><?php echo isset($tdrow['stock_quantity']) ? $tdrow['stock_quantity'] : (isset($tdrow['stock_qty']) ? $tdrow['stock_qty'] : '0.00');?></td>
+												<td><?php echo isset($tdrow['quantity']) ? $tdrow['quantity'] : (isset($tdrow['issue_qty']) ? $tdrow['issue_qty'] : '0.00');?></td>
+                                                                                                <td><?php echo isset($tdrow['rate']) ? $tdrow['rate'] : '0.00';?></td>
+												<?php if($issue_status == 3 || $issue_status == 4 || $issue_status == 10):?>
+													<td><?php echo isset($tdrow['demage_quantity']) ? $tdrow['demage_quantity'] : '0.00';?></td>
+													<td><?php echo isset($tdrow['shortage_quantity']) ? $tdrow['shortage_quantity'] : '0.00';?></td>
+													<td><?php echo isset($tdrow['accepted_quantity']) ? $tdrow['accepted_quantity'] : '0.00';?></td>
+													<td><?php echo isset($tdrow['sound_quantity']) ? $tdrow['sound_quantity'] : '0.00'; ?></td>
+												<?php endif;?>
+                                                                                                											    <td><?php echo isset($tdrow['amount']) ? $tdrow['amount'] : '0.00'; ?></td>
+
+												<td><?php echo isset($tdrow['remarks']) ? $tdrow['remarks'] : '';?></td>
+											</tr>
+										<?php endforeach; endif; ?>
+									</tbody>
+								</table>
+							</div>
+						</div>
+                        <div class="space-32"></div>
+					</div>
+					<div class="row">
+						<div class="col-lg-12" style="text-align: right">
+							<?php if($issue_status == '2' && (int)$transaction_id <= 0 && $this->user_location == $from_location && sizeof($depoyManager)>0):?>
+								<a href="<?php echo $this->url('inissue', array('action'=>'editissue', 'id'=>$issues_id));?>" class="btn btn-info"> <i class="fa fa-pencil"></i> Edit </a>
+								<a href="<?php echo $this->url('inissue', array('action'=>'pendingissue', 'id'=>$issues_id));?>" class="btn btn-warning" data-toggle="modal" data-target="#modal"> <i class="fa fa-plane"></i> Issue </a>
+							<?php elseif((($issue_status == '2' && (int)$transaction_id > 0) || $issue_status == '10') && sizeof($depoyManager)>0):?>
+								<?php 
+									$admin_locs = $this->usersObj->getColumn($userID,'admin_location');
+									$admin_loc_array = explode(',', (string) $admin_locs);
+									if(in_array($to_location, $admin_loc_array)):
+									//if($this->user_location == $to_location):
+								?>
+									<a href="<?php echo $this->url('inissue',array('action'=>'receiveissue','id'=>$issues_id));?>" class="btn btn-danger"><i class="fa fa-arrow-circle-o-down"> Receive </i></a>							
+								<?php endif; ?>
+								<?php if(in_array($to_location, $admin_loc_array) && $issue_status == '10' ):?>
+								   <a href="<?php echo $this->url('inissue',array('action'=>'confirmreceive','id'=>$issues_id));?>" class="btn btn-success">
+									<i class="fa fa-check-square-o"> Confirm </i></a>
+								<?php endif; ?>
+							<?php endif;?>
+						</div>
+					</div>
+					<!-- Upload and Download file attachments -->			
+					<?php   
+					   echo $this->partial('partial/attachment.phtml', array('process' => '11', 'process_id'=> $issues_id , 'status' => $issue_status));
+					?>					
+				    <!-- End of attachment -->
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+<?php 
+else: ?> 
+    <div class="alert alert-success fade in"> 
+	    You don't have privilege to view the details of this dispatch. 
+	</div>
+<?php endif; ?>
+<!-- for modal -->
+<div id="modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+	<div class="modal-dialog">
+		<div class="modal-content">
+		</div>
+	</div>
+</div>
+<script type="text/javascript">
+	(function(){
+		var bindIssueViewActions = function(){
+			if(typeof window.jQuery === 'undefined'){
+				return false;
+			}
+			var $ = window.jQuery;
+			$('#tc_btn').off('click.issue').on('click.issue', function(){
+				window.document.location = "<?php echo $this->url('transporter', array('action' => 'viewtranspcharge','id' => $tc_id));?>";
+			});
+			var $printButton = $('#print');
+			if(!$printButton.length){
+				return true;
+			}
+			if($printButton.data('pdf-bound') === 1){
+				return true;
+			}
+			if($.isFunction($.fn.genpdfinvoice3)){
+				$printButton.genpdfinvoice3({
+					content: '#report-print',
+					src:"<?php echo $this->url('print', array('action' => 'index'));?>",
+					orentation:"P",
+					size: 'A4'
+				});
+				$printButton.data('pdf-bound', 1);
+			}else if($.isFunction($.fn.genpdfinvoice)){
+				$printButton.genpdfinvoice({
+					content: '#report-print',
+					src:"<?php echo $this->url('pdfxls', array('action' => 'pdf'));?>",
+					orentation:"L"
+				});
+				$printButton.data('pdf-bound', 1);
+			}
+			return ($printButton.data('pdf-bound') === 1);
+		};
+		var bindAttempts = 0;
+		var bindTimer = window.setInterval(function(){
+			bindAttempts++;
+			if(bindIssueViewActions() || bindAttempts >= 50){
+				window.clearInterval(bindTimer);
+			}
+		}, 200);
+		bindIssueViewActions();
+	})();
+</script>
+

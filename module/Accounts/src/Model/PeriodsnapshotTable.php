@@ -54,13 +54,15 @@ class PeriodsnapshotTable extends AbstractTableGateway
 		}
 		$id = isset($data['id']) ? (int)$data['id'] : 0;
 		if ($id > 0) {
-			return ($this->update($data, array('id' => $id))) ? $id : 0;
+			$updated = $this->update($data, array('id' => $id));
+			return ($updated === false) ? 0 : $id;
 		}
 
 		$existing = $this->getByPeriod($data['period_end'], $data['region'], $data['location']);
 		if (!empty($existing) && isset($existing['id'])) {
 			$data['id'] = $existing['id'];
-			return ($this->update($data, array('id' => $existing['id']))) ? (int)$existing['id'] : 0;
+			$updated = $this->update($data, array('id' => $existing['id']));
+			return ($updated === false) ? 0 : (int)$existing['id'];
 		}
 
 		$this->insert($data);

@@ -33,7 +33,7 @@
 						<div class="form-group col-lg-2">
 							<label for="region" class="control-label">Region</label>
 							<select class="form-control" name="region" id="region" data-paceholder="Select">
-								<option value="-1">All</option>
+								<?php if(!empty($allowAllRegion)): ?><option value="-1">All</option><?php endif; ?>
 								<?php foreach ($region as $reg):?>
 								<?php $selected_reg = ($data["region"]==$reg['id'])? 'selected':'';?>
 									<option value="<?php echo $reg['id'];?>" <?php echo $selected_reg;?>>
@@ -45,13 +45,13 @@
 						<div class="form-group col-lg-2">
 							<label for="location" class="contol-label">Location</label>
 							<select class="form-control" name="location" id="location" data-placeholder="Select" >
-								<option value="-1">All</option>
+								<?php if(!empty($allowAllLocation)): ?><option value="-1">All</option><?php endif; ?>
 								<?php if($data["region"]>0):
-									foreach($this->locationObj->get(array('region'=> $data["region"])) as $locations):
+									foreach($locations as $locationRow):
 								?>
-									<?php $selected_loc = ($data["location"]==$locations['id'])? 'selected':'';?>
-									<option value="<?php echo $locations['id'];?>" <?php echo $selected_loc;?> >
-									    <?php echo $locations['location'];?>
+									<?php $selected_loc = ($data["location"]==$locationRow['id'])? 'selected':'';?>
+									<option value="<?php echo $locationRow['id'];?>" <?php echo $selected_loc;?> >
+									    <?php echo $locationRow['location'];?>
 									</option>
 								<?php endforeach;
 								endif;?>							
@@ -369,9 +369,10 @@
 </div>
 <script>
 	$(function(){
+		var allowAllLocation = <?php echo !empty($allowAllLocation) ? 'true' : 'false'; ?>;
 		$("#region").change(function() { 
 			$.post( "<?php echo $this->url('ajresponse', array('action' => 'getlocation')); ?>/"+ $("#region").val(), function( data ) {
-				var newdata ="<option value='-1'>All</option>"+data
+				var newdata = (allowAllLocation ? "<option value='-1'>All</option>" : "") + data;
 				$('#location').html( newdata );
 				$("#location").trigger('chosen:updated');
 			});
@@ -510,7 +511,7 @@
 			$toggle.attr('aria-busy', 'true');
 
 			$.post(
-				"<?php echo $this->url('report', array('action' => 'fetchreportlevel'));?>",
+				"<?php echo $this->url('report', array('action' => 'getreportlevel'));?>",
 				{
 					report: 'trialbalance',
 					level: nextLevel,
@@ -528,15 +529,29 @@
 						$row.after(response.rows);
 						$('tr.tb-row[data-parent="' + nodeId + '"]').show();
 						setCaret($toggle, 'expanded');
+					} else if (response && response.message) {
+						setCaret($toggle, 'collapsed');
+						window.alert(response.message);
 					} else {
 						setCaret($toggle, 'collapsed');
 					}
 				},
 				'json'
-			).fail(function() {
+			).fail(function(jqXHR) {
 				setCaret($toggle, 'collapsed');
 				console.error('Failed to load trial balance children for node:', nodeId);
-				window.alert('Unable to load the selected level right now. Please try again.');
+				var errorMessage = 'Unable to load the selected level right now. Please try again.';
+				if (jqXHR && jqXHR.responseJSON && jqXHR.responseJSON.message) {
+					errorMessage = jqXHR.responseJSON.message;
+				} else if (jqXHR && jqXHR.responseText) {
+					try {
+						var response = JSON.parse(jqXHR.responseText);
+						if (response && response.message) {
+							errorMessage = response.message;
+						}
+					} catch (e) {}
+				}
+				window.alert(errorMessage);
 			}).always(function() {
 				$row.attr('data-loading', '0');
 				$toggle.removeAttr('aria-busy');

@@ -103,7 +103,7 @@ return array(
 							'id'     	 => '[a-zA-Z0-9_-]*',
 						),
 						'defaults' => array(
-							'controller' => Controller\IssueController::class,
+							'controller' => \Stock\Controller\IssueController::class,
 							'action'     => 'index',
 						),
 					),

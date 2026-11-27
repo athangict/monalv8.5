@@ -86,49 +86,22 @@ $minYear = date('Y', strtotime($minYear)); ?>
 			</thead> 
 			<tbody>
 				<?php $i=1+(($page-1)*25); foreach ($paginator as $row):
-				if($role==100 ||$role==99):
-					if($row['voucher_id']==4):?>
-						<tr>
-							<td><?php echo $i++; ?> </td>
-							<td>
-								<b><?php echo $row['voucher_no'];?>&nbsp;</b> 
-								<span style="color:#666;font-size:95%;"><?php echo $row['voucher_date'];?></span>
-								<span class="label label-info"><?php echo $row['voucher_type'];?> voucher</span>
-								<?php echo $this->status($row['status']);?>
-							</td>
-							<td>
-								<?php //if($row['voucher_id'] == 15):
-									//echo"<span class='label label-info'> Opening Balance </span>";
-								//else:
-									echo $this->currency($row['voucher_amount']);
-								//endif;?>
-							</td>
-							<td><?php echo $this->button(1,$row['id']);?><?php if($role==100 ||$role==99):echo $this->button(6,$row['id'],'','775');endif;?></td>
-						</tr>
-				    <?php 
-				    endif;
-				 elseif($user==$row['author']):
-					if($row['voucher_id']==4):?>
-						<tr data-href="<?php echo $this->button(4,$row['id']); ?>">
-							<td><?php echo $i++; ?> </td>
-							<td>
-								<b><?php echo $row['voucher_no'];?>&nbsp;</b> 
-								<span style="color:#666;font-size:95%;"><?php echo $row['voucher_date'];?></span>
-								<span class="label label-info"><?php echo $row['voucher_type'];?> voucher</span>
-								<?php echo $this->status($row['status']);?>
-							</td>
-							<td>
-								<?php if($row['voucher_id'] == 15):
-									echo"<span class='label label-info'> Opening Balance </span>";
-								else:
-									echo $this->currency($row['voucher_amount']);
-								endif;?>
-							</td>
-							<td><?php echo $this->button(1,$row['id']);?><?php if($role==100 ||$role==99):echo $this->button(6,$row['id'],'','775');endif;?></td>
-						</tr>
-				    <?php 
-				    endif;
-				endif;
+				if($row['voucher_id']==4):?>
+					<tr<?php if (!$isPrivileged && $user!=$row['author']):?> data-href="<?php echo $this->button(4,$row['id']); ?>"<?php endif;?>>
+						<td><?php echo $i++; ?> </td>
+						<td>
+							<b><?php echo $row['voucher_no'];?>&nbsp;</b>
+							<span style="color:#666;font-size:95%;"><?php echo $row['voucher_date'];?></span>
+							<span class="label label-info"><?php echo $row['voucher_type'];?> voucher</span>
+							<?php echo $this->status($row['status']);?>
+						</td>
+						<td><?php echo $this->currency($row['voucher_amount']);?></td>
+						<td>
+							<?php if($isPrivileged || $user==$row['author']): echo $this->button(1,$row['id']); else: echo $this->button(4,$row['id']); endif;?>
+							<?php if($isPrivileged): echo $this->button(6,$row['id'],'','775'); endif;?>
+						</td>
+					</tr>
+				<?php endif;
 				endforeach;?>
 			</tbody>
 		</table>
@@ -148,4 +121,3 @@ $minYear = date('Y', strtotime($minYear)); ?>
 		orentation:"P",//L =landscape, P = potrait
 	});
 </script>
-

@@ -71,10 +71,11 @@ class BuildingMasterTable extends AbstractTableGateway
             $select->where($where);
 
             $selectString = $sql->getSqlStringForSqlObject($select);
-            $results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();          
+            $results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();
+            $columns = '';
            
            foreach ($results as $result):
-              $columns =  $result[$column];
+              $columns =  isset($result[$column]) ? $result[$column] : '';
            endforeach; 
           
            return $columns;       

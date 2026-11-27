@@ -10,6 +10,7 @@ use Laminas\Validator\File\Extension;
 use Laminas\Authentication\AuthenticationService;
 use Interop\Container\ContainerInterface;
 use Accounts\Model As Accounts;
+use Asset\Model As Asset;
 use Acl\Model As Acl;
 use Administration\Model As Administration;
 use Hr\Model As Hr;
@@ -116,6 +117,203 @@ class VehicleController extends AbstractActionController
 			return $row;
 		}
 		return null;
+	}
+
+	private function getVehicleAssets()
+	{
+		$vehicleTypeIds = array();
+		$assetTypes = $this->getDefinedTable(Asset\AssettypeTable::class)->getAll();
+		foreach ($assetTypes as $assetType):
+			$typeName = strtolower(trim(strip_tags((string)($assetType['name'] ?? ''))));
+			$typeCode = strtoupper(trim((string)($assetType['code'] ?? '')));			
+			if (($typeName !== '' && strpos($typeName, 'vehicle') !== false) || $typeCode === 'V'):
+				$vehicleTypeIds[] = (int)$assetType['id'];
+			endif;
+		endforeach;
+		$vehicleTypeIds = array_values(array_unique(array_filter($vehicleTypeIds)));
+
+		if(!empty($vehicleTypeIds)):
+			return $this->getDefinedTable(Asset\AssetmanagementTable::class)->getasset(array('a.asset_type' => $vehicleTypeIds));
+		endif;
+		return $this->getDefinedTable(Asset\AssetmanagementTable::class)->getasset(array('a.status' => 1));
+	}
+
+	private function getOrCreateVehicleSubhead($headId, $vehicleId)
+	{
+		$headId = (int)$headId;
+		$vehicleId = (int)$vehicleId;
+		if($headId <= 0 || $vehicleId <= 0):
+			return 0;
+		endif;
+
+		$subheadCode = trim((string)$this->getDefinedTable(Asset\AssetmanagementTable::class)->getColumn($vehicleId, 'code'));
+		$subheadName = trim((string)$this->getDefinedTable(Asset\AssetmanagementTable::class)->getColumn($vehicleId, 'name'));
+		if($subheadCode === '' || $subheadName === ''):
+			return 0;
+		endif;
+
+		$subheadTable = $this->getDefinedTable(Accounts\SubheadTable::class);
+		$existingSubhead = $subheadTable->getbanks(array(
+			'head'   => $headId,
+			'type'   => 1,
+			'ref_id' => $vehicleId
+		));
+		if(!empty($existingSubhead)):
+			$existingSubheadId = (int)$existingSubhead[0]['id'];
+			$syncData = array(
+				'id'       => $existingSubheadId,
+				'code'     => $subheadCode,
+				'name'     => $subheadName,
+				'modified' => $this->_modified,
+			);
+			$syncData = $this->_safedataObj->rteSafe($syncData);
+			$syncedSubheadId = (int)$subheadTable->save($syncData);
+			return ($syncedSubheadId > 0) ? $existingSubheadId : 0;
+		endif;
+
+		$legacySubhead = $subheadTable->getbanks(array(
+			'head' => $headId,
+			'type' => 1,
+			'code' => $subheadCode,
+			'name' => $subheadName
+		));
+		if(!empty($legacySubhead)):
+			$legacySubheadId = (int)$legacySubhead[0]['id'];
+			$legacyUpdate = array(
+				'id'       => $legacySubheadId,
+				'ref_id'   => $vehicleId,
+				'modified' => $this->_modified,
+			);
+			$legacyUpdate = $this->_safedataObj->rteSafe($legacyUpdate);
+			$updatedLegacyId = (int)$subheadTable->save($legacyUpdate);
+			return ($updatedLegacyId > 0) ? $legacySubheadId : 0;
+		endif;
+
+		$newSubhead = array(
+			'head'     => $headId,
+			'type'     => 1,
+			'ref_id'   => $vehicleId,
+			'code'     => $subheadCode,
+			'name'     => $subheadName,
+			'author'   => $this->_author,
+			'created'  => $this->_created,
+			'modified' => $this->_modified,
+		);
+		$newSubhead = $this->_safedataObj->rteSafe($newSubhead);
+		return (int)$this->getDefinedTable(Accounts\SubheadTable::class)->save($newSubhead);
+	}
+
+	private function formatHeadListForDisplay(array $headList)
+	{
+		foreach($headList as &$headRow):
+			$headCode = trim((string)(isset($headRow['code']) ? $headRow['code'] : ''));
+			$headName = trim((string)(isset($headRow['name']) ? $headRow['name'] : ''));
+			if($headCode !== '' && $headName !== ''):
+				$headRow['code'] = $headCode.'-'.$headName;
+			endif;
+		endforeach;
+		unset($headRow);
+		return $headList;
+	}
+
+	private function getRepairHeadsByLocation($locationId, $classFilter = '')
+	{
+		$locationScope = $this->getLocationScopeWithGlobal($locationId);
+		$vehicleRegisterTable = $this->getDefinedTable(Fleet\VehicleRegisterTable::class);
+		$vehicleRegs = $vehicleRegisterTable->get(array(
+			'location' => $locationScope
+		));
+		if(empty($vehicleRegs)):
+			$vehicleRegs = $vehicleRegisterTable->getAll();
+		endif;
+		$headIds = array();
+		foreach($vehicleRegs as $vehicleReg):
+			$headId = isset($vehicleReg['head']) ? (int)$vehicleReg['head'] : 0;
+			if($headId > 0):
+				$headIds[] = $headId;
+			endif;
+		endforeach;
+		$headIds = array_values(array_unique($headIds));
+		if(empty($headIds)):
+			return array();
+		endif;
+
+		$headList = $this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.id' => $headIds));
+		$classFilter = strtolower(trim((string)$classFilter));
+		if($classFilter !== ''):
+			$headList = array_values(array_filter($headList, function($headRow) use ($classFilter) {
+				$headClass = strtolower(trim((string)(isset($headRow['class']) ? $headRow['class'] : '')));
+				$headClassCode = strtolower(trim((string)(isset($headRow['class_code']) ? $headRow['class_code'] : '')));
+				$headClassId = isset($headRow['class_id']) ? (int)$headRow['class_id'] : 0;
+				if($classFilter === 'income'):
+					return strpos($headClass, 'income') !== false
+						|| strpos($headClassCode, 'income') !== false
+						|| $headClassId === 3;
+				endif;
+				return $headClass === $classFilter || $headClassCode === $classFilter;
+			}));
+		endif;
+		return $this->formatHeadListForDisplay($headList);
+	}
+
+	private function getHeadOptionsHtml(array $headList)
+	{
+		$options = "<option value=''></option>";
+		foreach($headList as $head):
+			$options .= "<option value='".$head['id']."'>".$head['code']."</option>";
+		endforeach;
+		return $options;
+	}
+
+	private function getSubheadOptionsHtml(array $subheadList)
+	{
+		$options = "<option value='0'></option>";
+		foreach($subheadList as $subhead):
+			$options .= "<option value='".$subhead['id']."'>".$subhead['name']."</option>";
+		endforeach;
+		return $options;
+	}
+
+	private function getLocationScopeWithGlobal($locationId)
+	{
+		$scope = array(-1);
+		$locationId = (int)$locationId;
+		if($locationId <= 0):
+			$locationId = isset($this->_user->location) ? (int)$this->_user->location : 0;
+		endif;
+		if($locationId > 0):
+			$scope[] = $locationId;
+		endif;
+		return array_values(array_unique($scope));
+	}
+
+	private function getPartySubheadsByLocation($locationId)
+	{
+		$locationScope = $this->getLocationScopeWithGlobal($locationId);
+		$partyRows = $this->getDefinedTable(Accounts\PartyTable::class)->get(array('p.location'=>$locationScope));
+		$partyIds = array();
+		foreach($partyRows as $partyRow):
+			if(isset($partyRow['id']) && (int)$partyRow['id'] > 0):
+				$partyIds[] = (int)$partyRow['id'];
+			endif;
+		endforeach;
+		$partyIds = array_values(array_unique($partyIds));
+		if(empty($partyIds)):
+			return array();
+		endif;
+		return $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.type'=>2, 'sh.ref_id'=>$partyIds));
+	}
+
+	private function getBankAccountsByLocation($locationId)
+	{
+		$locationScope = $this->getLocationScopeWithGlobal($locationId);
+		return $this->getDefinedTable(Accounts\BankaccountTable::class)->get(array('ba.location'=>$locationScope));
+	}
+
+	private function getCashAccountsByLocation($locationId)
+	{
+		$locationScope = $this->getLocationScopeWithGlobal($locationId);
+		return $this->getDefinedTable(Accounts\CashaccountTable::class)->get(array('ca.location'=>$locationScope));
 	}
 	
 	private function canAccessRepairDetail($detailId)
@@ -273,6 +471,8 @@ class VehicleController extends AbstractActionController
 			'locationObj' 	=> $this->getDefinedTable(Administration\LocationTable::class),
 			'headObj'   	=> $this->getDefinedTable(Accounts\HeadTable::class),
 			'subheadObj'   	=> $this->getDefinedTable(Accounts\SubheadTable::class),
+			'groupObj'   	=> $this->getDefinedTable(Fleet\VehicleGroupTable::class),
+			'assetObj'   	=> $this->getDefinedTable(Asset\AssetmanagementTable::class),
 			'employeeObj' => $this->getDefinedTable(Hr\EmployeeTable::class),
 			'employeeObj' => $this->getDefinedTable(Hr\EmployeeTable::class),
 			'recordObj' => $this->getDefinedTable(Fleet\TransportTable::class),
@@ -286,31 +486,62 @@ class VehicleController extends AbstractActionController
 	{
 		$this->init();
 		if($this->getRequest()->isPost()){
-			$form = $this->getRequest()->getpost();					
-			$data = array(
-				'license_plate'        => $form['license_plate'],
-				'location'             => $form['location'],
-				'head'             		=> $form['head'],
-				'subhead'             	=> $form['subhead'],
-				'registered_date'       => $form['registered_date'],
-				'pol'       			=> $form['pol'],
-				'status' 		       => 1,
-				'author'               => $this->_author,
-				'created'              => $this->_created,
-				'modified'             => $this->_modified
-			);
-			$data   = $this->_safedataObj->rteSafe($data);
-			//$this->_connection->beginTransaction(); //***Transaction begins here***//
-			$result = $this->getDefinedTable(Fleet\VehicleRegisterTable::class)->save($data);
-			if($result > 0){ 		
-				$this->flashMessenger()->addMessage("success^ Successfully add new transport");
+			$form = $this->getRequest()->getpost();
+			$vehicleId = isset($form['vehicle']) ? (int)$form['vehicle'] : ((isset($form['license_plate'])) ? (int)$form['license_plate'] : 0);
+			$headIds = isset($form['head']) ? (array)$form['head'] : array();
+
+			if($vehicleId <= 0 || empty($headIds)):
+				$this->flashMessenger()->addMessage("error^ Please select vehicle and head.");
 				return $this->redirect()->toRoute('vehicle', array('action' =>'vehiclesecondary'));
-			}
-			else{
-				//$this->_connection->rollback(); // rollback transaction on failure
+			endif;
+
+			$this->_connection->beginTransaction(); //***Transaction begins here***//
+			$createdRows = 0;
+			foreach($headIds as $headId):
+				$headId = (int)$headId;
+				if($headId <= 0):
+					continue;
+				endif;
+				$subheadId = $this->getOrCreateVehicleSubhead($headId, $vehicleId);
+
+				if($subheadId <= 0):
+					$this->_connection->rollback(); // rollback transaction on failure
+					$this->flashMessenger()->addMessage("error^ Failed to create subhead.");
+					return $this->redirect()->toRoute('vehicle', array('action' =>'vehiclesecondary'));
+				endif;
+
+				$data = array(
+					'asset_vehicle_id' => $vehicleId,
+					'vehicle_group'    => isset($form['vehicle_group']) ? (int)$form['vehicle_group'] : null,
+					'location'         => $form['location'],
+					'head'             => $headId,
+					'subhead'          => $subheadId,
+					'registered_date'  => $form['registered_date'],
+					'pol'              => $form['pol'],
+					'status'           => 1,
+					'author'           => $this->_author,
+					'created'          => $this->_created,
+					'modified'         => $this->_modified
+				);
+				$data   = $this->_safedataObj->rteSafe($data);
+				$result = $this->getDefinedTable(Fleet\VehicleRegisterTable::class)->save($data);
+				if($result <= 0):
+					$this->_connection->rollback(); // rollback transaction on failure
+					$this->flashMessenger()->addMessage("error^ Failed to add new transport");
+					return $this->redirect()->toRoute('vehicle', array('action' =>'vehiclesecondary'));
+				endif;
+				$createdRows++;
+			endforeach;
+
+			if($createdRows <= 0):
+				$this->_connection->rollback(); // rollback transaction on failure
 				$this->flashMessenger()->addMessage("error^ Failed to add new transport");
-				return $this->redirect()->toRoute('transport');
-			}		
+				return $this->redirect()->toRoute('vehicle', array('action' =>'vehiclesecondary'));
+			endif;
+
+			$this->_connection->commit(); // commit transaction on success
+			$this->flashMessenger()->addMessage("success^ Successfully added transport for selected heads");
+			return $this->redirect()->toRoute('vehicle', array('action' =>'vehiclesecondary'));
 		}	
 		$ViewModel = new ViewModel(array(
 			'title' 		  => "Add Vehicle Record",
@@ -327,9 +558,10 @@ class VehicleController extends AbstractActionController
 			'pooldtnObj'      => $this->getDefinedTable(Fleet\TransportPDTable::class),
 			'fuelObj'         => $this->getDefinedTable(Fleet\FuelTable::class),
 			'employees'       => $this->getDefinedTable(Hr\EmployeeTable::class)->getAllEmployee(),
-			'head' => $this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.group'=>array(15,9,22,13))),
-			'subhead' => $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.head'=>array(8,176,179,190,198))),
-			'plate' => $this->getDefinedTable(Fleet\TransportTable::class)->getAll(),
+			'head' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
+			'subhead' => $this->getDefinedTable(Accounts\SubheadTable::class)->getAll(),
+			'groupObj'        => $this->getDefinedTable(Fleet\VehicleGroupTable::class),
+			'vehicles' => $this->getVehicleAssets(),
 		));
 
 		$ViewModel->setTerminal(True);
@@ -345,12 +577,74 @@ class VehicleController extends AbstractActionController
 		if($this->getRequest()->isPost()):
 			$request= $this->getRequest();
 			$form = $request->getPost();				
+			$vehicleId = isset($form['vehicle']) ? (int)$form['vehicle'] : ((isset($form['license_plate'])) ? (int)$form['license_plate'] : 0);
+			$headId = isset($form['head']) ? (int)$form['head'] : 0;
+			if($vehicleId <= 0 || $headId <= 0):
+				$this->flashMessenger()->addMessage("error^ Please select valid vehicle and head.");
+				return $this->redirect()->toRoute('vehicle', array('action' =>'vehiclesecondary'));
+			endif;
+
+			$currentRows = $this->getDefinedTable(Fleet\VehicleRegisterTable::class)->get($this->_id);
+			$currentRow = null;
+			foreach($currentRows as $row):
+				$currentRow = $row;
+				break;
+			endforeach;
+			if($currentRow == null):
+				$this->flashMessenger()->addMessage("error^ Vehicle secondary record not found.");
+				return $this->redirect()->toRoute('vehicle', array('action' =>'vehiclesecondary'));
+			endif;
+
+			$currentSubheadId = 0;
+			if(isset($currentRow['subhead'])):
+				$currentSubheadRaw = trim((string)$currentRow['subhead']);
+				$currentSubheadParts = array_filter(array_map('trim', explode(',', $currentSubheadRaw)));
+				if(!empty($currentSubheadParts)):
+					$currentSubheadId = (int)$currentSubheadParts[0];
+				endif;
+			endif;
+			$currentVehicleId = isset($currentRow['asset_vehicle_id']) ? (int)$currentRow['asset_vehicle_id'] : 0;
+
+			$this->_connection->beginTransaction(); //***Transaction begins here***//
+			if($currentSubheadId > 0 && $currentVehicleId === $vehicleId):
+				$subheadCode = trim((string)$this->getDefinedTable(Asset\AssetmanagementTable::class)->getColumn($vehicleId, 'code'));
+				$subheadName = trim((string)$this->getDefinedTable(Asset\AssetmanagementTable::class)->getColumn($vehicleId, 'name'));
+				if($subheadCode === '' || $subheadName === ''):
+					$this->_connection->rollback(); // rollback transaction on failure
+					$this->flashMessenger()->addMessage("error^ Failed to resolve vehicle code/name for subhead.");
+					return $this->redirect()->toRoute('vehicle', array('action' =>'vehiclesecondary'));
+				endif;
+				$subheadUpdateData = array(
+					'id'       => $currentSubheadId,
+					'head'     => $headId,
+					'code'     => $subheadCode,
+					'name'     => $subheadName,
+					'modified' => $this->_modified,
+				);
+				$subheadUpdateData = $this->_safedataObj->rteSafe($subheadUpdateData);
+				$updatedSubheadId = (int)$this->getDefinedTable(Accounts\SubheadTable::class)->save($subheadUpdateData);
+				if($updatedSubheadId <= 0):
+					$this->_connection->rollback(); // rollback transaction on failure
+					$this->flashMessenger()->addMessage("error^ Failed to move subhead to selected head.");
+					return $this->redirect()->toRoute('vehicle', array('action' =>'vehiclesecondary'));
+				endif;
+				$subheadId = $currentSubheadId;
+			else:
+				$subheadId = $this->getOrCreateVehicleSubhead($headId, $vehicleId);
+				if($subheadId <= 0):
+					$this->_connection->rollback(); // rollback transaction on failure
+					$this->flashMessenger()->addMessage("error^ Failed to create subhead.");
+					return $this->redirect()->toRoute('vehicle', array('action' =>'vehiclesecondary'));
+				endif;
+			endif;
+
 			$data = array(
 				'id'                   => $this->_id,
-				'license_plate'        => $form['license_plate'],
+				'asset_vehicle_id'     => $vehicleId,
+				'vehicle_group'        => isset($form['vehicle_group']) ? (int)$form['vehicle_group'] : null,
 				'location'             => $form['location'],
-				'head'             		=> $form['head'],
-				'subhead'             	=> $form['subhead'],
+				'head'             		=> $headId,
+				'subhead'             	=> $subheadId,
 				'registered_date'       => $form['registered_date'],
 				'pol'       			=> $form['pol'],
 				'status' 		       => 1,
@@ -362,11 +656,12 @@ class VehicleController extends AbstractActionController
 			$data   = $this->_safedataObj->rteSafe($data);
 			$result = $this->getDefinedTable(Fleet\VehicleRegisterTable::class)->save($data);
 			if($result > 0){ 		
+					$this->_connection->commit(); // commit transaction on success
 					$this->flashMessenger()->addMessage("success^ Successfully add new transport");
 					return $this->redirect()->toRoute('vehicle', array('action' =>'vehiclesecondary'));
 				}
 				else{
-					//$this->_connection->rollback(); // rollback transaction on failure
+					$this->_connection->rollback(); // rollback transaction on failure
 					$this->flashMessenger()->addMessage("error^ Failed to add new transport");
 					return $this->redirect()->toRoute('transport');
 				}					
@@ -378,9 +673,10 @@ class VehicleController extends AbstractActionController
 			'locationObj' 	  => $this->getDefinedTable(Administration\LocationTable::class),
 			'activities'  	  => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
 			'employees'       => $this->getDefinedTable(Hr\EmployeeTable::class)->getAllEmployee(),
-			'head' => $this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.group'=>array(15,9,22,13))),
-			'subhead' => $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('h.group'=>array(15,9,22,13))),
-			'license'       => $this->getDefinedTable(Fleet\TransportTable::class)->getAll(),
+			'head' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
+			'subhead' => $this->getDefinedTable(Accounts\SubheadTable::class)->getAll(),
+			'groupObj'      => $this->getDefinedTable(Fleet\VehicleGroupTable::class),
+			'vehicles'      => $this->getVehicleAssets(),
 	    ));
 		$ViewModel->setTerminal(True);
 		return $ViewModel;
@@ -760,8 +1056,8 @@ class VehicleController extends AbstractActionController
 				array_push($rm_no_list, substr($result['repair_no'], 12));
 			endforeach;
 			
-			$next_serial = max($rm_no_list) + 1;	
-			switch(strlen($next_serial)){
+			$next_serial = empty($rm_no_list) ? 1 : (max($rm_no_list) + 1);
+			switch(strlen((string)$next_serial)){
 				case 1: $next_rm_serial = "000".$next_serial; break;
 				case 2: $next_rm_serial = "00".$next_serial;  break;
 				case 3: $next_rm_serial = "0".$next_serial;   break;
@@ -806,7 +1102,7 @@ class VehicleController extends AbstractActionController
 							'party'       	 => $party,
 							'ref_no'       	 => $ref_no,
 							'license_plate'  => $license_plate[$i],
-							'remarks' 	 	 => $remarks[$i],
+							'remarks' 	 	 => isset($remarks[$i]) ? $remarks[$i] : '',
 							'author'    	 => $this->_author,
 							'created'   	 => $this->_created,
 							'modified'  	 => $this->_modified
@@ -825,6 +1121,11 @@ class VehicleController extends AbstractActionController
 				return $this->redirect()->toRoute('repair');
 			}		
 		}	
+		$headList = $this->getRepairHeadsByLocation($this->_userloc);
+		if(empty($headList)):
+			$headList = $this->formatHeadListForDisplay($this->getDefinedTable(Accounts\HeadTable::class)->getAll());
+		endif;
+
 		return new ViewModel( array(
 			'title' 		  => "Add Transport Expense",
 			'user_loc'        => $this->_userloc,
@@ -832,11 +1133,11 @@ class VehicleController extends AbstractActionController
 			'locationObj' 	  => $this->getDefinedTable(Administration\LocationTable::class),
 			'vehiclepartObj'  => $this->getDefinedTable(Fleet\VehiclePartTable::class),
 			'rowsets'         => $this->getDefinedTable(Accounts\AssetsTable::class)->getAll(),
-			'head' 			  => $this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.id'=>array(8,176,179,198,257,254,253,258))),
+			'head' 			  => $headList,
 			'user_role'			=>$this->_user->role,
 			//'party' 		  => $this->getDefinedTable(Accounts\PartyTable::class)->get(array('p.role'=>array(5,7))),
-			'party' 		  => $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('head'=>array(8,142,144,233,234,235,236))),
-			'heads' 		  => $this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.id'=>array(8,62,142,144,233,234,235,236))),
+			'party' 		  => $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.type'=>2)),
+			'heads' 		  => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
 	    ));
 	}
 	/**
@@ -862,15 +1163,27 @@ class VehicleController extends AbstractActionController
 			);
 			$data   = $this->_safedataObj->rteSafe($data);
 			$result = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseTable::class)->save($data);
-				$details_id = $form['details_id'];
-			    $service_item = $form['service_item'];
-				$service      = $form['service'];
-				$amount       = $form['amount'];
-				$remarks      = $form['note'];
+				$deletedDetails = isset($form['deleted_details_id']) ? (array)$form['deleted_details_id'] : array();
+				foreach($deletedDetails as $deletedDetailId):
+					$deletedDetailId = (int)$deletedDetailId;
+					if($deletedDetailId <= 0):
+						continue;
+					endif;
+					$deletedDetailRow = $this->getRepairDetailRow($deletedDetailId);
+					if(!empty($deletedDetailRow) && isset($deletedDetailRow['repair']) && (int)$deletedDetailRow['repair'] === (int)$form['repair_id']):
+						$this->getDefinedTable(Fleet\VehicleRepairMaintaneseDtlsTable::class)->remove($deletedDetailId);
+					endif;
+				endforeach;
+
+				$details_id = isset($form['details_id']) ? (array)$form['details_id'] : array();
+			    $service_item = isset($form['service_item']) ? (array)$form['service_item'] : array();
+				$service      = isset($form['service']) ? (array)$form['service'] : array();
+				$amount       = isset($form['amount']) ? (array)$form['amount'] : array();
+				$remarks      = isset($form['note']) ? (array)$form['note'] : array();
 				$location      = $form['location'];
 				$party     	   = $form['party'];
 				$ref_no        = $form['ref_no'];
-				$license_plate = $form['license_plate'];
+				$license_plate = isset($form['license_plate']) ? (array)$form['license_plate'] : array();
 				for($i=0; $i < sizeof($details_id); $i++):
 					if(isset($service_item[$i]) && $service_item[$i] > 0):
 					
@@ -885,7 +1198,7 @@ class VehicleController extends AbstractActionController
 								'party'       	 => $party,
 								'ref_no'       	 => $ref_no,
 								'license_plate'  => $license_plate[$i],
-								'remarks' 	 	 => $remarks[$i],
+								'remarks' 	 	 => isset($remarks[$i]) ? $remarks[$i] : '',
 								'author'    	 => $this->_author,
 								'created'   	 => $this->_created,
 								'modified'  	 => $this->_modified
@@ -930,23 +1243,63 @@ class VehicleController extends AbstractActionController
 			 return $this->redirect()->toRoute('vehicle',array('action'=>'viewrepair','id'=>$form['repair_id']));	
 		}
 		
-		$expense_details = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseDtlsTable::class)->get(array('rmd.repair' => $this->_id)); 
+		$expense_details = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseDtlsTable::class)->get(array('rmd.repair' => $this->_id));
+		$currentPartyId = 0;
+		foreach($expense_details as $expenseDetailRow):
+			if(isset($expenseDetailRow['party']) && (int)$expenseDetailRow['party'] > 0):
+				$currentPartyId = (int)$expenseDetailRow['party'];
+				break;
+			endif;
+		endforeach;
+		$repairMainRows = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseTable::class)->get($this->_id);
+		$repairLocationId = 0;
+		foreach($repairMainRows as $repairMainRow):
+			if(isset($repairMainRow['location_id']) && (int)$repairMainRow['location_id'] > 0):
+				$repairLocationId = (int)$repairMainRow['location_id'];
+			elseif(isset($repairMainRow['location']) && is_numeric((string)$repairMainRow['location'])):
+				$repairLocationId = (int)$repairMainRow['location'];
+			endif;
+			break;
+		endforeach;
+		$serviceHeadList = ($repairLocationId > 0) ? $this->getRepairHeadsByLocation($repairLocationId) : array();
+		if(empty($serviceHeadList)):
+			$serviceHeadList = $this->formatHeadListForDisplay($this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.id'=>array(8,176,179,198))));
+		endif;
+		$partyList = $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.type'=>2));
+		if(empty($partyList)):
+			$partyList = $this->getDefinedTable(Accounts\SubheadTable::class)->getAll();
+		endif;
+		$partyIdList = array();
+		foreach($partyList as $partyRow):
+			$partyIdList[] = (int)$partyRow['id'];
+		endforeach;
+		if($currentPartyId > 0 && !in_array($currentPartyId, $partyIdList, true)):
+			$currentPartyRows = $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.id'=>$currentPartyId));
+			foreach($currentPartyRows as $currentPartyRow):
+				$partyList[] = $currentPartyRow;
+				break;
+			endforeach;
+		endif;
+		$currentPartyHeadId = ($currentPartyId > 0) ? (int)$this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('id'=>$currentPartyId), 'head') : 0;
 		return new ViewModel( array(
 			'title' 		     => "Edit Transport Expense",
 			'expense_details' 	 => $expense_details,
 			'user_loc'           => $this->_userloc,
+			'user_role'          => $this->_user->role,
 			'regionObj'          => $this->getDefinedTable(Administration\RegionTable::class),
 			'locationObj' 	     => $this->getDefinedTable(Administration\LocationTable::class),
 			'activities'  	     => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
-			'party' 		  => $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('head'=>array(8,142,144,233,234,235,236))),
+			'party' 		  => $partyList,
 			'employee_driver'    => $this->getDefinedTable(Hr\EmployeeTable::class)->get(array('e.position_title'=>array(26,30,34,38,39,25))),
 			'userRoleObj'        => $this->getDefinedTable(Administration\UsersTable::class),
 			'uomObj'             => $this->getDefinedTable(Stock\UomTable::class),
 			'itemuomObj'         => $this->getDefinedTable(Stock\ItemUomTable::class),
 			'vehiclepartObj'     => $this->getDefinedTable(Fleet\VehiclePartTable::class),
 			'rowsets'            => $this->getDefinedTable(Accounts\AssetsTable::class)->getAll(),
-			'repair_maintaneses' => $this->getDefinedTable(Fleet\VehicleRepairMaintaneseTable::class)->get($this->_id),
-			'service' => $this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.id'=>array(8,176,179,198))),
+			'repair_maintaneses' => $repairMainRows,
+			'service' => $serviceHeadList,
+			'heads' 		  => $this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.id'=>array(8,62,142,144,233,234,235,236))),
+			'current_party_head' => $currentPartyHeadId,
 			'service_item' => $this->getDefinedTable(Fleet\VehicleRegisterTable::class)->getAll(),
 			'subhead'            =>$this->getDefinedTable(Accounts\SubheadTable::class)->getAll(),
 			'RMDObject'          => $this->getDefinedTable(Fleet\VehicleRepairMaintaneseDtlsTable::class),
@@ -995,6 +1348,12 @@ class VehicleController extends AbstractActionController
 		$result3=$this->getDefinedTable(Accounts\TransactionTable::Class)->remove($repairdetails['transaction']);
 		$result =$this->getDefinedTable(Fleet\VehicleRepairMaintaneseDtlsTable::Class)->remove($repairdetails['id']);
 		if($result > 0):
+				$remainingDetails = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseDtlsTable::Class)->get(array('repair'=>$t_id));
+				if(empty($remainingDetails)):
+					$this->getDefinedTable(Fleet\VehicleRepairMaintaneseTable::Class)->remove($t_id);
+					$this->flashMessenger()->addMessage("success^ deleted successfully");
+					return $this->redirect()->toRoute('vehicle',array('action' => 'repair'));
+				endif;
 				$this->flashMessenger()->addMessage("success^ deleted successfully");
 			else:
 				
@@ -1046,7 +1405,10 @@ class VehicleController extends AbstractActionController
 				echo '<pre>';print_r($postages);
 			endforeach;exit;*/
 			$location = $this->getDefinedTable(Administration\UsersTable::class)->getColumn(array('id'=>$this->_author),'location');
-			$region = $this->getDefinedTable(Administration\UsersTable::class)->getColumn(array('id'=>$this->_author),'region');
+			$region = (int)$this->getDefinedTable(Administration\LocationTable::class)->getColumn($sourceLocation, 'region');
+			if($region <= 0):
+				$region = (int)$this->getDefinedTable(Administration\UsersTable::class)->getColumn(array('id'=>$this->_author),'region');
+			endif;
 			
 				$statusUpdate = array(
 				'id' 	=> $xpenseresult,
@@ -1068,9 +1430,9 @@ class VehicleController extends AbstractActionController
 				foreach($results as $result):
 					array_push($pltp_no_list, substr($result['voucher_no'], 14));
 				endforeach;
-				$next_serial = max($pltp_no_list) + 1;
+				$next_serial = empty($pltp_no_list) ? 1 : (max($pltp_no_list) + 1);
 					
-				switch(strlen($next_serial)){
+				switch(strlen((string)$next_serial)){
 					case 1: $next_dc_serial = "0000".$next_serial; break;
 					case 2: $next_dc_serial = "000".$next_serial;  break;
 					case 3: $next_dc_serial = "00".$next_serial;   break;
@@ -1204,8 +1566,8 @@ class VehicleController extends AbstractActionController
 				array_push($rm_no_list, substr($result['repair_no'], 12));
 			endforeach;
 			
-			$next_serial = max($rm_no_list) + 1;	
-			switch(strlen($next_serial)){
+			$next_serial = empty($rm_no_list) ? 1 : (max($rm_no_list) + 1);
+			switch(strlen((string)$next_serial)){
 				case 1: $next_rm_serial = "000".$next_serial; break;
 				case 2: $next_rm_serial = "00".$next_serial;  break;
 				case 3: $next_rm_serial = "0".$next_serial;   break;
@@ -1290,10 +1652,12 @@ class VehicleController extends AbstractActionController
 			'locationObj' 	  => $this->getDefinedTable(Administration\LocationTable::class),
 			'vehiclepartObj'  => $this->getDefinedTable(Fleet\VehiclePartTable::class),
 			'rowsets'         => $this->getDefinedTable(Accounts\AssetsTable::class)->getAll(),
-			'head' => $this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.group'=>array(9))),
+			'head' => $this->getRepairHeadsByLocation($this->_userloc, 'income'),
 			'user_role'			=>$this->_user->role,
 			//'party' => $this->getDefinedTable(Accounts\PartyTable::class)->get(array('p.role'=>array(11,12,13,15,18,19))),
-			'party' => $this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.id'=>array(76,79,97,238))),
+			'party' => $this->getPartySubheadsByLocation($this->_userloc),
+			'bankacc' => $this->getBankAccountsByLocation($this->_userloc),
+			'cashacc' => $this->getCashAccountsByLocation($this->_userloc),
 			'bankaccObj' => $this->getDefinedTable(Accounts\BankaccountTable::class),
 			'cashaccObj' => $this->getDefinedTable(Accounts\CashaccountTable::class),
 	    ));
@@ -1320,11 +1684,23 @@ class VehicleController extends AbstractActionController
 			);
 			$data   = $this->_safedataObj->rteSafe($data);
 			$result = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseTable::class)->save($data);
-				$details_id = $form['details_id'];
-				$service_item = $form['service_item'];
-				$service      = $form['service'];
-				$amount       = $form['amount'];
-				$remarks      = $form['note'];
+				$deletedDetails = isset($form['deleted_details_id']) ? (array)$form['deleted_details_id'] : array();
+				foreach($deletedDetails as $deletedDetailId):
+					$deletedDetailId = (int)$deletedDetailId;
+					if($deletedDetailId <= 0):
+						continue;
+					endif;
+					$deletedDetailRow = $this->getRepairDetailRow($deletedDetailId);
+					if(!empty($deletedDetailRow) && isset($deletedDetailRow['repair']) && (int)$deletedDetailRow['repair'] === (int)$form['repair_id']):
+						$this->getDefinedTable(Fleet\VehicleRepairMaintaneseDtlsTable::class)->remove($deletedDetailId);
+					endif;
+				endforeach;
+
+				$details_id = isset($form['details_id']) ? (array)$form['details_id'] : array();
+				$service_item = isset($form['service_item']) ? (array)$form['service_item'] : array();
+				$service      = isset($form['service']) ? (array)$form['service'] : array();
+				$amount       = isset($form['amount']) ? (array)$form['amount'] : array();
+				$remarks      = isset($form['note']) ? (array)$form['note'] : array();
 				$location      = $form['location'];
 				$cash     	   = $form['cash'];
 				$journal       = $form['journal_no'];
@@ -1404,7 +1780,20 @@ class VehicleController extends AbstractActionController
 			 return $this->redirect()->toRoute('vehicle',array('action'=>'viewvehicleincome','id'=>$form['repair_id']));	
 		}
 		
-		$expense_details = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseDtlsTable::class)->get(array('rmd.repair' => $this->_id)); 
+		$expense_details = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseDtlsTable::class)->get(array('rmd.repair' => $this->_id));
+		$incomeMainRows = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseTable::class)->get($this->_id);
+		$incomeLocationId = 0;
+		foreach($incomeMainRows as $incomeMainRow):
+			if(isset($incomeMainRow['location_id']) && (int)$incomeMainRow['location_id'] > 0):
+				$incomeLocationId = (int)$incomeMainRow['location_id'];
+			elseif(isset($incomeMainRow['location']) && is_numeric((string)$incomeMainRow['location'])):
+				$incomeLocationId = (int)$incomeMainRow['location'];
+			endif;
+			break;
+		endforeach;
+		if($incomeLocationId <= 0):
+			$incomeLocationId = (int)$this->_userloc;
+		endif;
 		return new ViewModel( array(
 			'title' 		     => "Edit Transport Income",
 			'expense_details' 	 => $expense_details,
@@ -1412,9 +1801,11 @@ class VehicleController extends AbstractActionController
 			'regionObj'          => $this->getDefinedTable(Administration\RegionTable::class),
 			'locationObj' 	     => $this->getDefinedTable(Administration\LocationTable::class),
 			'activities'  	     => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
-			'party' => $this->getDefinedTable(Accounts\PartyTable::class)->get(array('p.role'=>array(11,12,13,15,18,19))),
-			'repair_maintaneses' => $this->getDefinedTable(Fleet\VehicleRepairMaintaneseTable::class)->get($this->_id),
-			'service' => $this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.id'=>array(190))),
+			'party' => $this->getPartySubheadsByLocation($incomeLocationId),
+			'repair_maintaneses' => $incomeMainRows,
+			'service' => $this->getRepairHeadsByLocation($incomeLocationId, 'income'),
+			'bankacc' => $this->getBankAccountsByLocation($incomeLocationId),
+			'cashacc' => $this->getCashAccountsByLocation($incomeLocationId),
 			'subhead'            =>$this->getDefinedTable(Accounts\SubheadTable::class)->getAll(),
 			'RMDObject'          => $this->getDefinedTable(Fleet\VehicleRepairMaintaneseDtlsTable::class),
 			'bankaccObj' => $this->getDefinedTable(Accounts\BankaccountTable::class),
@@ -1458,9 +1849,9 @@ class VehicleController extends AbstractActionController
 					foreach($results as $result):
 						array_push($pltp_no_list, substr($result['voucher_no'], 14));
 					endforeach;
-					$next_serial = max($pltp_no_list) + 1;
+					$next_serial = empty($pltp_no_list) ? 1 : (max($pltp_no_list) + 1);
 						
-					switch(strlen($next_serial)){
+					switch(strlen((string)$next_serial)){
 						case 1: $next_dc_serial = "0000".$next_serial; break;
 						case 2: $next_dc_serial = "000".$next_serial;  break;
 						case 3: $next_dc_serial = "00".$next_serial;   break;
@@ -1496,7 +1887,7 @@ class VehicleController extends AbstractActionController
 							'routing' 			=> 2,
 							'status' 			=> 6, // status initiated 
 							'routing_status'	=>2,
-							'action_performed'	=>1,
+							'action_performed'	=>0,
 							'description'		=>"Transport Expense",
 							'author' 			=>$this->_author,
 							'created' 			=>$this->_created,  
@@ -1593,7 +1984,7 @@ class VehicleController extends AbstractActionController
 									'routing' 			=> 2,
 									'status' 			=> 6, // status initiated 
 									'routing_status'	=>2,
-									'action_performed'	=>1,
+									'action_performed'	=>0,
 									'description'		=>"Transport Expense",
 									'author' 			=>$this->_author,
 									'created' 			=>$this->_created,  
@@ -1664,7 +2055,7 @@ class VehicleController extends AbstractActionController
 								$result5 = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseTable::class)->save($data2);
 							endforeach;
 						}
-						if($result4):
+						if($resultTrans > 0):
 							$notification_data = array(
 								'route'         => 'transaction',
 								'action'        => 'viewcredit',
@@ -1677,10 +2068,12 @@ class VehicleController extends AbstractActionController
 							//print_r($notification_data);exit;
 							$notificationResult = $this->getDefinedTable(Acl\NotificationTable::class)->save($notification_data);
 							if($notificationResult > 0 ){	
-								$user = $this->getDefinedTable(Administration\UsersTable::class)->get(array('region'=>$region,'role'=>array('3')));
-								foreach($user as $row):						    
-									$user_location_id = $this->getDefinedTable(Administration\UsersTable::class)->getColumn($row['id'], 'location');
-									//if($user_location_id == $location ):						
+								$userList = $this->getDefinedTable(Administration\UsersTable::class)->get(array('region'=>$region,'status'=>1));
+								foreach($userList as $row):
+									$rowRoles = array_map('trim', explode(',', (string)$row['role']));
+									if(!in_array('3', $rowRoles, true)):
+										continue;
+									endif;
 										$notify_data = array(
 											'notification' => $notificationResult,
 											'user'    	   => $row['id'],
@@ -1691,7 +2084,6 @@ class VehicleController extends AbstractActionController
 											'modified'   => $this->_modified,  
 										);
 										$notifyResult = $this->getDefinedTable(Acl\NotifyTable::class)->save($notify_data);
-									//endif;
 								endforeach;
 							}
 						endif;
@@ -1783,174 +2175,204 @@ class VehicleController extends AbstractActionController
 	public function commitvehicleincomeAction()
 	{
 		$this->init();
-		//if($this->getRequest()->isPost()){
-		$admin_locs = $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_author,'location');
-        $admin_loc_array = explode(',',$admin_locs);
-		//if($this->getRequest()->isPost()){
-		//	$form = $this->getRequest()->getPost();
-			$incomeresult = $this->_id;
-			$repairdtls = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseDtlsTable::class)->get(array('repair'=>$this->_id));
-		
-		/*	foreach($postage as $postages):
-				echo '<pre>';print_r($postages);
-			endforeach;exit;*/
-			$location = $this->getDefinedTable(Administration\UsersTable::class)->getColumn(array('id'=>$this->_author),'location');
-			$region = $this->getDefinedTable(Administration\UsersTable::class)->getColumn(array('id'=>$this->_author),'region');
-			
-				$statusUpdate = array(
-				'id' 	=> $incomeresult,
-				'status' => 4,
-				);
-			$statusUpdate =  $this->_safedataObj->rteSafe($statusUpdate);
-			$status= $this->getDefinedTable(Fleet\VehicleRepairMaintaneseTable::class)->save($statusUpdate);
-			foreach($repairdtls as $repairdtl):
-				$incomeDate= $this->getDefinedTable(Fleet\VehicleRepairMaintaneseTable::class)->getColumn(array('id'=>$repairdtl['repair']),'work_order_date');
-				$repair_no= $this->getDefinedTable(Fleet\VehicleRepairMaintaneseTable::class)->getColumn(array('id'=>$repairdtl['repair']),'repair_no');
-				//echo '<pre>';print_r($repairdtl);	endforeach;
-			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($this->_user->location, 'prefix');
-				$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getcolumn(15,'prefix');
-				$date = date('ym',strtotime(date('Y-m-d')));
-				$tmp_VCNo = $loc.'-'.$prefix.$date;
-				
-				$results = $this->getDefinedTable(Accounts\TransactionTable::class)->getSerial($tmp_VCNo);
-				
-				$pltp_no_list = array();
-				foreach($results as $result):
-					array_push($pltp_no_list, substr($result['voucher_no'], 14));
-				endforeach;
-				$next_serial = max($pltp_no_list) + 1;
-					
-				switch(strlen($next_serial)){
-					case 1: $next_dc_serial = "0000".$next_serial; break;
-					case 2: $next_dc_serial = "000".$next_serial;  break;
-					case 3: $next_dc_serial = "00".$next_serial;   break;
-					case 4: $next_dc_serial = "0".$next_serial;    break;
-					default: $next_dc_serial = $next_serial;       break;
-				}	
-				$voucher_no = $tmp_VCNo.$next_dc_serial;
-				
-			$data2 = array(
-				'voucher_date' 	  	=> $incomeDate,
-				'voucher_type' 	  	=> 15,
-				'region' 	  		=> $region,
-				'voucher_no' 	  	=> $voucher_no,
-				'voucher_amount' 	=> $repairdtl['amount'],
+		$incomeresult = $this->_id;
+		$repairdtls = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseDtlsTable::class)->get(array('repair'=>$incomeresult));
+		if(empty($repairdtls)):
+			$this->flashMessenger()->addMessage("notice^ No income details found to commit.");
+			return $this->redirect()->toRoute('vehicle', array('action'=>'viewvehicleincome','id'=>$incomeresult));
+		endif;
+
+		$location = $this->getDefinedTable(Administration\UsersTable::class)->getColumn(array('id'=>$this->_author),'location');
+		$region = $this->getDefinedTable(Administration\UsersTable::class)->getColumn(array('id'=>$this->_author),'region');
+		$incomeDate = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseTable::class)->getColumn(array('id'=>$incomeresult),'work_order_date');
+		$repair_no = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseTable::class)->getColumn(array('id'=>$incomeresult),'repair_no');
+
+		$loc = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($this->_user->location, 'prefix');
+		$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getcolumn(15,'prefix');
+		$date = date('ym',strtotime(date('Y-m-d')));
+		$tmp_VCNo = $loc.'-'.$prefix.$date;
+		$results = $this->getDefinedTable(Accounts\TransactionTable::class)->getSerial($tmp_VCNo);
+		$pltp_no_list = array();
+		foreach($results as $result):
+			array_push($pltp_no_list, substr($result['voucher_no'], 14));
+		endforeach;
+		$next_serial = empty($pltp_no_list) ? 1 : (max($pltp_no_list) + 1);
+		switch(strlen((string)$next_serial)){
+			case 1: $next_dc_serial = "0000".$next_serial; break;
+			case 2: $next_dc_serial = "000".$next_serial;  break;
+			case 3: $next_dc_serial = "00".$next_serial;   break;
+			case 4: $next_dc_serial = "0".$next_serial;    break;
+			default: $next_dc_serial = $next_serial;       break;
+		}
+		$voucher_no = $tmp_VCNo.$next_dc_serial;
+
+		$totalVoucherAmount = 0;
+		foreach($repairdtls as $repairdtl):
+			$totalVoucherAmount += (float)$repairdtl['amount'];
+		endforeach;
+
+		$firstDetail = null;
+		foreach($repairdtls as $repairdtl):
+			$firstDetail = $repairdtl;
+			break;
+		endforeach;
+
+		$this->_connection->beginTransaction(); //***Transaction begins here***//
+
+		$statusUpdate = array(
+			'id' 	=> $incomeresult,
+			'status' => 4,
+		);
+		$statusUpdate =  $this->_safedataObj->rteSafe($statusUpdate);
+		$status = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseTable::class)->save($statusUpdate);
+		if($status <= 0):
+			$this->_connection->rollback();
+			$this->flashMessenger()->addMessage("notice^ Failed to update income status.");
+			return $this->redirect()->toRoute('vehicle', array('action'=>'viewvehicleincome','id'=>$incomeresult));
+		endif;
+
+		$data2 = array(
+			'voucher_date' 	  	=> $incomeDate,
+			'voucher_type' 	  	=> 15,
+			'region' 	  		=> $region,
+			'voucher_no' 	  	=> $voucher_no,
+			'voucher_amount' 	=> $totalVoucherAmount,
+			'status' 	  		=> 4,
+			'doc_id' 	  		=> "fleet",
+			'against'			=> 0,
+			'doc_type' 	  		=> " ",
+			'remark' 	  		=> $repair_no,
+			'author' 			=> $this->_author,
+			'created' 			=> $this->_created,
+			'modified' 			=> $this->_modified,
+		);
+		$data2 =  $this->_safedataObj->rteSafe($data2);
+		$result2 = $this->getDefinedTable(Accounts\TransactionTable::class)->save($data2);
+		if($result2 <= 0):
+			$this->_connection->rollback();
+			$this->flashMessenger()->addMessage("notice^ Failed to create transaction.");
+			return $this->redirect()->toRoute('vehicle', array('action'=>'viewvehicleincome','id'=>$incomeresult));
+		endif;
+
+		if($firstDetail['cash'] == 0):
+			$ref = $firstDetail['bankacc'];
+			$subhead = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('ref_id'=>$ref,'type'=>3),'id');
+			$head = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('id'=>$subhead),'head');
+			$data4 = array(
+				'transaction' 	    => $result2,
+				'voucher_dates'     => $data2['voucher_date'],
+				'voucher_types' 	=> 15,
+				'location' 	  		=> $location,
+				'against'		    => 0,
+				'activity'			=> $location,
+				'head' 	  			=> $head,
+				'sub_head' 	  		=> $subhead,
+				'debit' 	  		=> $totalVoucherAmount,
+				'credit' 	  		=> 0,
 				'status' 	  		=> 4,
-				'doc_id' 	  		=> "fleet",
-				'against'			=>0,
-				'doc_type' 	  		=> " ",
-				'remark' 	  		=> $repair_no,
-				'author' 			 =>$this->_author,
-				'created' 			 =>$this->_created,
-				'modified' 			 =>$this->_modified,
+				'bank_trans_journal'=> isset($firstDetail['journal_no']) ? $firstDetail['journal_no'] : 0,
+				'author' 			=> $this->_author,
+				'created' 			=> $this->_created,
+				'modified' 			=> $this->_modified,
 			);
-			$data2 =  $this->_safedataObj->rteSafe($data2);
-			$result2 = $this->getDefinedTable(Accounts\TransactionTable::class)->save($data2);
+		elseif($firstDetail['cash'] == 1):
+			$ref = $firstDetail['cashacc'];
+			$subhead = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('ref_id'=>$ref,'type'=>6),'id');
+			$head = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('id'=>$subhead),'head');
+			$data4 = array(
+				'transaction' 	=> $result2,
+				'voucher_dates' => $data2['voucher_date'],
+				'voucher_types' => 15,
+				'location' 	  	=> $location,
+				'activity'      => $location,
+				'head' 	  		=> $head,
+				'sub_head' 	  	=> $subhead,
+				'against'		=> 0,
+				'debit' 	  	=> $totalVoucherAmount,
+				'credit' 	  	=> 0,
+				'status' 	  	=> 4,
+				'author' 		=> $this->_author,
+				'created' 		=> $this->_created,
+				'modified' 		=> $this->_modified,
+			);
+		else:
+			$ref = $firstDetail['party'];
+			$subhead = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('id'=>$ref),'id');
+			$head = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('id'=>$subhead),'head');
+			$data4 = array(
+				'transaction' 	=> $result2,
+				'voucher_dates' => $data2['voucher_date'],
+				'voucher_types' => 15,
+				'location' 	  	=> $location,
+				'head' 	  		=> $head,
+				'sub_head' 	  	=> $subhead,
+				'debit' 	  	=> $totalVoucherAmount,
+				'against'		=> 0,
+				'activity'      => $location,
+				'credit' 	  	=> 0,
+				'status' 	  	=> 4,
+				'ref_no' 	  	=> isset($firstDetail['ref_no']) ? $firstDetail['ref_no'] : 0,
+				'author' 		=> $this->_author,
+				'created' 		=> $this->_created,
+				'modified' 		=> $this->_modified,
+			);
+		endif;
+		if((int)$head <= 0 || (int)$subhead <= 0):
+			$this->_connection->rollback();
+			$this->flashMessenger()->addMessage("notice^ Failed to resolve payment account subhead.");
+			return $this->redirect()->toRoute('vehicle', array('action'=>'viewvehicleincome','id'=>$incomeresult));
+		endif;
+
+		$data4 = $this->_safedataObj->rteSafe($data4);
+		$result4 = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->save($data4);
+		if($result4 <= 0):
+			$this->_connection->rollback();
+			$this->flashMessenger()->addMessage("notice^ Failed to save payment transaction detail.");
+			return $this->redirect()->toRoute('vehicle', array('action'=>'viewvehicleincome','id'=>$incomeresult));
+		endif;
+
+		foreach($repairdtls as $repairdtl):
 			$data3 = array(
 				'transaction' 	=> $result2,
 				'voucher_dates' => $data2['voucher_date'],
-				'voucher_types' 	=> 15,
+				'voucher_types' => 15,
 				'location' 	  	=> $location,
 				'head' 	  		=> $repairdtl['service'],
 				'sub_head' 	  	=> $repairdtl['service_item'],
-				'activity'		=>$location,
-				'against'		=>0,
+				'activity'		=> $location,
+				'against'		=> 0,
 				'debit' 	  	=> 0,
-				'credit' 	  	=> $data2['voucher_amount'],
+				'credit' 	  	=> $repairdtl['amount'],
 				'ref_no' 	  	=> 0,
 				'status' 	  	=> 4,
-				'author' 		=>$this->_author,
-				'created' 		=>$this->_created,
-				'modified' 		=>$this->_modified,
+				'author' 		=> $this->_author,
+				'created' 		=> $this->_created,
+				'modified' 		=> $this->_modified,
 			);
-			$data3 =  $this->_safedataObj->rteSafe($data3);
-			$this->_connection->beginTransaction(); //***Transaction begins here***//
+			$data3 = $this->_safedataObj->rteSafe($data3);
 			$result3 = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->save($data3);
-			if($repairdtl['cash']==0):
-				$ref=$repairdtl['bankacc'];
-				$subhead = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('ref_id'=>$ref,'type'=>3),'id');
-				$head = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('id'=>$subhead),'head');
-				$data4 = array(
-					'transaction' 	=> $result2,
-					'voucher_dates' => $data2['voucher_date'],
-					'voucher_types' 	=> 15,
-					'location' 	  	=> $location,
-					'against'		=>0,
-					'activity'			=>$location,
-					'head' 	  		=> $head,
-					'sub_head' 	  	=> $subhead,
-					'debit' 	  	=> $data2['voucher_amount'],
-					'credit' 	  	=> 0,
-					'status' 	  	=> 4,
-					'bank_trans_journal'=>$repairdtl['journal_no'],
-					'author' 		=>$this->_author,
-					'created' 		=>$this->_created,
-					'modified' 		=>$this->_modified,
-				);
-			elseif($repairdtl['cash']==1):/**If paid deposited into Bank Account  */
-				$ref=$repairdtl['cashacc'];
-				$subhead = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('ref_id'=>$ref,'type'=>6),'id');
-				
-				$head = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('id'=>$subhead),'head');
-				$data4 = array(
-					'transaction' 	=> $result2,
-					'voucher_dates' => $data2['voucher_date'],
-					'voucher_types' => 15,
-					'location' 	  	=> $location,
-					'activity'      => $location,
-					'head' 	  		=> $head,
-					'sub_head' 	  	=> $subhead,
-					'against'		=>0,
-					'debit' 	  	=> $data2['voucher_amount'],
-					'credit' 	  	=> 0,
-					'status' 	  	=> 4,
-					'author' 		=> $this->_author,
-					'created' 		=> $this->_created,
-					'modified' 		=> $this->_modified,
-				);
-				else:
-				$ref=$repairdtl['party'];
-				$subhead = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('id'=>$ref),'id');
-				$head = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('id'=>$subhead),'head');
-				$data4 = array(
-					'transaction' 	=> $result2,
-					'voucher_dates' => $data2['voucher_date'],
-					'voucher_types' => 15,
-					'location' 	  	=> $location,
-					'head' 	  		=> $head,
-					'sub_head' 	  	=> $subhead,
-					'debit' 	  	=> $data2['voucher_amount'],
-					'against'		=>0,
-					'activity'      =>$location,
-					'credit' 	  	=> 0,
-					'status' 	  	=> 4,
-					'ref_no' 	  	=> $repairdtl['ref_no'],
-					'activity'		=>$location,
-					'author' 		=>$this->_author,
-					'created' 		=>$this->_created,
-					'modified' 		=>$this->_modified,
-				);
-				
+			if($result3 <= 0):
+				$this->_connection->rollback();
+				$this->flashMessenger()->addMessage("notice^ Failed to save income transaction detail.");
+				return $this->redirect()->toRoute('vehicle', array('action'=>'viewvehicleincome','id'=>$incomeresult));
 			endif;
-			/**Condtion ended */
-			$data4 =  $this->_safedataObj->rteSafe($data4);
-			$result4 = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->save($data4);	
+
 			$data5 = array(
 				'id' 	=> $repairdtl['id'],
 				'transaction' => $result2,
-				);
-			$data5 =  $this->_safedataObj->rteSafe($data5);
+			);
+			$data5 = $this->_safedataObj->rteSafe($data5);
 			$result5 = $this->getDefinedTable(Fleet\VehicleRepairMaintaneseDtlsTable::class)->save($data5);
-		
-			if($result5 > 0):
-				$this->_connection->commit(); // rollback transaction over failure
-				$this->flashMessenger()->addMessage("success^ successfully committed the data");
-			else:
-				$this->_connection->rollback(); // rollback transaction over failure
-				$this->flashMessenger()->addMessage("notice^ Failed to commit  data");
+			if($result5 <= 0):
+				$this->_connection->rollback();
+				$this->flashMessenger()->addMessage("notice^ Failed to link income detail transaction.");
+				return $this->redirect()->toRoute('vehicle', array('action'=>'viewvehicleincome','id'=>$incomeresult));
 			endif;
 		endforeach;
-			return $this->redirect()->toRoute('vehicle', array('action'=>'viewvehicleincome','id'=>$incomeresult));
+
+		$this->_connection->commit();
+		$this->flashMessenger()->addMessage("success^ successfully committed the data");
+		return $this->redirect()->toRoute('vehicle', array('action'=>'viewvehicleincome','id'=>$incomeresult));
 			
 		//}
 		$ViewModel = new ViewModel(array(
@@ -2022,7 +2444,7 @@ class VehicleController extends AbstractActionController
 			foreach($results as $result):
 				array_push($rq_no_list, substr($result['requisition_no'], 8));
 			endforeach;
-			$next_serial = max($rq_no_list) + 1;	
+			$next_serial = empty($rq_no_list) ? 1 : (max($rq_no_list) + 1);
 			switch(strlen($next_serial)){
 				case 1: $next_rq_serial = "000".$next_serial; break;
 				case 2: $next_rq_serial = "00".$next_serial;  break;
@@ -2233,20 +2655,88 @@ class VehicleController extends AbstractActionController
 		));
 		exit;
 	}
+	/**
+	 * Get linked heads by location
+	 */
+	public function getlocationheadAction()
+	{
+		$form = $this->getRequest()->getPost();
+		$locationId = isset($form['locationId']) ? (int)$form['locationId'] : 0;
+		$headScope = isset($form['headScope']) ? trim((string)$form['headScope']) : '';
+		$classFilter = ($headScope === 'income') ? 'income' : '';
+		$headList = $this->getRepairHeadsByLocation($locationId, $classFilter);
+		$bankOptions = "<option value='0'></option>";
+		$cashOptions = "<option value='0'></option>";
+		$bankAccounts = $this->getBankAccountsByLocation($locationId);
+		$cashAccounts = $this->getCashAccountsByLocation($locationId);
+
+		foreach($bankAccounts as $bankAccount):
+			$bankOptions .= "<option value='".$bankAccount['id']."'>".$bankAccount['code'].'_'.$bankAccount['account']."</option>";
+		endforeach;
+		foreach($cashAccounts as $cashAccount):
+			$cashOptions .= "<option value='".$cashAccount['id']."'>".$cashAccount['cash_account_code'].'_'.$cashAccount['cash_account_name']."</option>";
+		endforeach;
+		$partySubheads = $this->getPartySubheadsByLocation($locationId);
+		echo json_encode(array(
+			'head' => $this->getHeadOptionsHtml($headList),
+			'bank' => $bankOptions,
+			'cash' => $cashOptions,
+			'party' => $this->getSubheadOptionsHtml($partySubheads),
+		));
+		exit;
+	}
+	 /**
+	  * Get cash/bank account options by location
+	  */
+	 public function getpaymentaccountsAction()
+	 {
+	 	$form = $this->getRequest()->getPost();
+	 	$locationId = isset($form['locationId']) ? (int)$form['locationId'] : 0;
+	 	$bankOptions = "<option value='0'></option>";
+	 	$cashOptions = "<option value='0'></option>";
+	 	$bankAccounts = $this->getBankAccountsByLocation($locationId);
+	 	$cashAccounts = $this->getCashAccountsByLocation($locationId);
+
+		foreach($bankAccounts as $bankAccount):
+	 		$bankOptions .= "<option value='".$bankAccount['id']."'>".$bankAccount['code'].'_'.$bankAccount['account']."</option>";
+	 	endforeach;
+		foreach($cashAccounts as $cashAccount):
+	 		$cashOptions .= "<option value='".$cashAccount['id']."'>".$cashAccount['cash_account_code'].'_'.$cashAccount['cash_account_name']."</option>";
+	 	endforeach;
+
+	 	echo json_encode(array(
+	 		'bank' => $bankOptions,
+	 		'cash' => $cashOptions,
+	 	));
+	 	exit;
+	 }
 	 /**
 	 * Get Location
 	 */
 	public function getlocationAction()
 	{		
 		$form = $this->getRequest()->getPost();
-		$licenseId =$form['licenseId'];
-		$tranport_list = $this->getDefinedTable(Fleet\TransportTable::class)->get(array('t.id'=>$licenseId));
-		foreach($tranport_list as $tranport_lists);
-		$location_list = $this->getDefinedTable(Administration\LocationTable::class)->get(array('id'=>$tranport_lists['location']));
-		$location = "<option value=''></option>";
-		foreach($location_list as $location_lists):
-			$location.="<option value='".$location_lists['id']."'>".$location_lists['location']."</option>";
+		$vehicleId = isset($form['vehicleId']) ? (int)$form['vehicleId'] : (isset($form['licenseId']) ? (int)$form['licenseId'] : 0);
+		$asset_list = $this->getDefinedTable(Asset\AssetmanagementTable::class)->get($vehicleId);
+		$locationId = 0;
+		foreach($asset_list as $asset_row):
+			$locationId = isset($asset_row['location_id']) ? (int)$asset_row['location_id'] : 0;
+			if($locationId <= 0 && isset($asset_row['location']) && is_numeric((string)$asset_row['location'])):
+				$locationId = (int)$asset_row['location'];
+			endif;
+			break;
 		endforeach;
+		if($locationId <= 0 && $vehicleId > 0):
+			$locationId = (int)$this->getDefinedTable(Asset\AssetmanagementTable::class)->getColumn($vehicleId, 'location');
+		endif;
+		$location_list = $this->getDefinedTable(Administration\LocationTable::class)->get(array('id'=>$locationId));
+		$location = "";
+		foreach($location_list as $location_lists):
+			$location.="<option value='".$location_lists['id']."' selected>".$location_lists['location']."</option>";
+		endforeach;
+		if($location == ""):
+			$location = "<option value=''></option>";
+		endif;
 		echo json_encode(array(
 				'location' => $location,
 		));
@@ -2261,13 +2751,16 @@ class VehicleController extends AbstractActionController
 		$serviceId = $form['serviceId'];
 		$locationId =$form['locationId'];
 		if($serviceId==8):
-			$subhead_list = $this->getDefinedTable(Fleet\VehicleRegisterTable::class)->get(array('head'=>$serviceId,'pol'=>0));
+			$subhead_list = $this->getDefinedTable(Fleet\VehicleRegisterTable::class)->get(array('head'=>$serviceId));
 		else:
-			$subhead_list = $this->getDefinedTable(Fleet\VehicleRegisterTable::class)->get(array('location'=>$locationId,'head'=>$serviceId,'pol'=>0));
+			$subhead_list = $this->getDefinedTable(Fleet\VehicleRegisterTable::class)->get(array('location'=>$locationId,'head'=>$serviceId));
 		endif;
-			$item = "<option value=''></option>";
+		$item = "<option value=''></option>";
 		foreach($subhead_list as $subhead_lists):
-			$item.="<option value='".$subhead_lists['subhead']."'>".$this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('id'=>$subhead_lists['subhead']),'name')."</option>";
+			$subheadCode = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('id'=>$subhead_lists['subhead']), 'code');
+			$subheadName = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('id'=>$subhead_lists['subhead']), 'name');
+			$itemLabel = trim((string)$subheadCode) !== '' ? ($subheadCode.' - '.$subheadName) : $subheadName;
+			$item.="<option value='".$subhead_lists['subhead']."'>".$itemLabel."</option>";
 		endforeach;
 		echo json_encode(array(
 				'item' => $item,

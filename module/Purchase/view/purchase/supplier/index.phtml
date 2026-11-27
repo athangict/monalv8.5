@@ -97,9 +97,7 @@ $this->headTitle($this->title);
 							<td><?php echo $this->purchase_receiptObj->getColumn($row['purchase_receipt'],'prn_no');?></td>
 							<td class="action">
 								<div class="btn-group">
-									<a class="btn btn-xs btn-danger" data-toggle="modal" data-target="#modal" href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "3-".$row['id'])); ?>" title="View Activity Logs">
-										<i class="ace-icon fa fa-plus bigger-120" ></i>  
-							  		</a>
+									<?php echo $this->button(6, "3-".$row['id'], 0, 3);?>
 						  		</div>
 							</td>	
 						</tr>

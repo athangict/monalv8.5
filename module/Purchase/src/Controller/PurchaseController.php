@@ -136,34 +136,23 @@ class PurchaseController extends AbstractActionController
 	public function indexAction()
 	{
 		$this->init();
-		$year ='';
-		$month = '';
-		if($this->getRequest()->isPost())
-		{
+		$year = (int)date('Y');
+		$month = (int)date('n');
+		if($this->getRequest()->isPost()):
 			$form = $this->getRequest()->getPost();
-			
-			$year = $form['year'];
-			$month = $form['month'];
-			
-			
-			$month = ($month == 0)? date('m'):$month;
-			$year = ($year == 0)? date('Y'):$year;
-			$data = array(
-					'year' => $year,
-					'month' => $month,
-					
-			);
-		}else{
-			$month = ($month == 0)? date('m'):$month;
-			$year = ($year == 0)? date('Y'):$year;
-			
-			
-			$data = array(
-					'year' => $year,
-					'month' => $month,
-					
-			);
-		}
+			$postedYear = isset($form['year']) ? (int)$form['year'] : 0;
+			$postedMonth = isset($form['month']) ? (int)$form['month'] : 0;
+			if($postedYear > 0):
+				$year = $postedYear;
+			endif;
+			if($postedMonth == -1 || ($postedMonth >= 1 && $postedMonth <= 12)):
+				$month = $postedMonth;
+			endif;
+		endif;
+		$data = array(
+				'year' => $year,
+				'month' => $month,
+		);
 		$purchase_results = $this->getDefinedTable(Purchase\PurchaseOrderTable::class)->getDateWise('po_date',$year,$month);
 		return new ViewModel(array(
 			'purchase_results' => $purchase_results,
@@ -183,6 +172,7 @@ class PurchaseController extends AbstractActionController
 		
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();						
+			$isAssetOrder = (isset($form['is_asset_order']) && (string)$form['is_asset_order'] === '1');
 			$location_prefix = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($form['destination'],'prefix');
 			$machine_no = '0';
 			//print_r($form['item']);
@@ -232,11 +222,18 @@ class PurchaseController extends AbstractActionController
 				$rate         = $form['rate'];
 				$remarks      = $form['remarks'];
 				for($i=0; $i < sizeof($item); $i++):
+					$currentItemClass = isset($item_class[$i]) ? (int)$item_class[$i] : 0;
+					$currentItem = isset($item[$i]) ? (int)$item[$i] : 0;
+					$currentItemName = isset($item_name[$i]) ? trim((string)$item_name[$i]) : '';
+					if($isAssetOrder):
+						$currentItemClass = 33;
+						$currentItem = 0;
+					endif;
 					$po_details = array(
 		      					'purchase_order' => $result,
-					     		'item'           => $item[$i],
-								'item_class'     => $item_class[$i],
-								'item_name'     => $item_name[$i],
+					     		'item'           => $currentItem,
+								'item_class'     => $currentItemClass,
+								'item_name'      => $currentItemName,
 								'subhead'     => $subhead[$i],
 					     		'uom'            => $uom[$i],
 					     		'quantity'  	 => $quantity[$i],
@@ -282,6 +279,7 @@ class PurchaseController extends AbstractActionController
 		
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			$isAssetOrder = (isset($form['is_asset_order']) && (string)$form['is_asset_order'] === '1');
 			$data = array(
 					'id'               => $this->_id,
 					'location'         => 1,
@@ -296,7 +294,7 @@ class PurchaseController extends AbstractActionController
 			);
 			$data   = $this->_safedataObj->rteSafe($data);
 			$result = $this->getDefinedTable(Purchase\PurchaseOrderTable::class)->save($data);
-				$id			  =	(isset($form['id']) && is_array($form['id'])) ? $form['id'] : array();
+				$id			  =	(isset($form['id']) && is_array($form['id'])) ? array_values($form['id']) : array();
 				$allowedDetailIds = array();
 				foreach ($this->getDefinedTable(Purchase\PODetailsTable::class)->get(array('purchase_order' => $this->_id)) as $detailRow) {
 					if (isset($detailRow['id']) && ctype_digit((string) $detailRow['id'])) {
@@ -311,75 +309,44 @@ class PurchaseController extends AbstractActionController
 				$quantity     = $form['quantity'];
 				$rate         = $form['rate'];
 				$remarks      = $form['remarks'];
-				if(!empty($id)){
-					for($i=0; $i < sizeof($id); $i++):
-						$detailId = (int) $id[$i];
-						if($detailId > 0 && !isset($allowedDetailIds[$detailId])){
-							$this->flashMessenger()->addMessage("error^ Invalid purchase order detail selection");
-							return $this->redirect()->toRoute('purorder', array('action' =>'editporder', 'id' => $this->_id));
-						}
-						
-							$po_details = array(
-									'id'			=> $detailId,
-									'purchase_order' => $result,
-									'item'           => $item[$i],
-									'item_class'     => $item_class[$i],
-									'item_name'     => $item_name[$i],
-									'subhead'     => $subhead[$i],
-									'uom'            => $uom[$i],
-									'quantity'  	 => $quantity[$i],
-									'rate'      	 => $rate[$i],
-									'remarks' 	 	 => $remarks[$i],
-									'modified'  	 => $this->_modified,
-									'author'  	 => $this->_author
-							);
-						$po_details   = $this->_safedataObj->rteSafe($po_details);
-						$this->getDefinedTable(Purchase\PODetailsTable::class)->save($po_details);		 		     
-					endfor;
-					if(sizeof($id)!=sizeof($item)){
-					for($i=sizeof($id); $i < sizeof($item); $i++):
-				
-						
-							$po_details = array(
-									'purchase_order' => $result,
-									'item'           => $item[$i],
-									'item_class'     => $item_class[$i],
-									'item_name'     => $item_name[$i],
-									'subhead'     => $subhead[$i],
-									'uom'            => $uom[$i],
-									'quantity'  	 => $quantity[$i],
-									'rate'      	 => $rate[$i],
-									'remarks' 	 	 => $remarks[$i],
-									'modified'  	 => $this->_modified,
-									'author'  	 => $this->_author
-							);
-						$po_details   = $this->_safedataObj->rteSafe($po_details);					
-						$this->getDefinedTable(Purchase\PODetailsTable::class)->save($po_details);		
-			 		     
-					endfor;
-					}
-				}
-				else{
-					//print("id is less than item");
+				$retainedDetailIds = array();
 				for($i=0; $i < sizeof($item); $i++):
-					
-						$po_details = array(
-		      					'purchase_order' => $result,
-					     		'item'           => $item[$i],
-								'item_class'     => $item_class[$i],
-								'item_name'     => $item_name[$i],
-								'subhead'     => $subhead[$i],
-					     		'uom'            => $uom[$i],
-					     		'quantity'  	 => $quantity[$i],
-					     		'rate'      	 => $rate[$i],
-								'remarks' 	 	 => $remarks[$i],
-					      		'modified'  	 => $this->_modified,
-								'author'  	 => $this->_author
-						);
-		     		$po_details   = $this->_safedataObj->rteSafe($po_details);
-			     	$this->getDefinedTable(Purchase\PODetailsTable::class)->save($po_details);		
-				   	 		     
+					$detailId = isset($id[$i]) ? (int) $id[$i] : 0;
+					if($detailId > 0 && !isset($allowedDetailIds[$detailId])){
+						$this->flashMessenger()->addMessage("error^ Invalid purchase order detail selection");
+						return $this->redirect()->toRoute('purorder', array('action' =>'editporder', 'id' => $this->_id));
+					}
+					$currentItemClass = isset($item_class[$i]) ? (int)$item_class[$i] : 0;
+					$currentItem = isset($item[$i]) ? (int)$item[$i] : 0;
+					$currentItemName = isset($item_name[$i]) ? trim((string)$item_name[$i]) : '';
+					if($isAssetOrder):
+						$currentItemClass = 33;
+						$currentItem = 0;
+					endif;
+					$po_details = array(
+						'purchase_order' => $result,
+						'item'           => $currentItem,
+						'item_class'     => $currentItemClass,
+						'item_name'      => $currentItemName,
+						'subhead'        => isset($subhead[$i]) ? $subhead[$i] : 0,
+						'uom'            => isset($uom[$i]) ? $uom[$i] : 0,
+						'quantity'       => isset($quantity[$i]) ? $quantity[$i] : 0,
+						'rate'           => isset($rate[$i]) ? $rate[$i] : 0,
+						'remarks'        => isset($remarks[$i]) ? $remarks[$i] : '',
+						'modified'       => $this->_modified,
+						'author'         => $this->_author
+					);
+					if($detailId > 0){
+						$po_details['id'] = $detailId;
+						$retainedDetailIds[$detailId] = true;
+					}
+					$po_details = $this->_safedataObj->rteSafe($po_details);
+					$this->getDefinedTable(Purchase\PODetailsTable::class)->save($po_details);
 				endfor;
+				foreach ($allowedDetailIds as $existingDetailId => $unused) {
+					if (!isset($retainedDetailIds[$existingDetailId])) {
+						$this->getDefinedTable(Purchase\PODetailsTable::class)->remove($existingDetailId);
+					}
 				}
 			
 			if($result > 0){
@@ -547,18 +514,36 @@ class PurchaseController extends AbstractActionController
 		$this->init();
 		
 		$form = $this->getRequest()->getPost();
-		$itemclass_id =$form['itemclassId'];
-		if($itemclass_id==33){
-			$sub_head = $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.head'=>[1,3])); 
-		}
-		else{
-			$sub_head = $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.head'=>9));
-		}
+		$isAsset = isset($form['isAsset']) ? (int)$form['isAsset'] : 0;
+		$itemclass_id = isset($form['itemclassId']) ? (int)$form['itemclassId'] : 0;
+		$item_id = isset($form['itemId']) ? (int)$form['itemId'] : 0;
+		$sub_head = array();
+		$financeSubheadId = 0;
+		if($isAsset === 1):
+			$sub_head = $this->getDefinedTable(Accounts\SubheadTable::class)->getAll();
+		else:
+		if($item_id > 0):
+			$itemGroupId = (int)$this->getDefinedTable(Stock\ItemTable::class)->getColumn($item_id, 'item_group');
+			if($itemGroupId > 0):
+				$financeSubheadId = (int)$this->getDefinedTable(Stock\ItemGroupTable::class)->getColumn($itemGroupId, 'fn_inventory');
+				if($financeSubheadId <= 0):
+					$financeSubheadId = (int)$this->getDefinedTable(Stock\ItemGroupTable::class)->getColumn($itemGroupId, 'finance_transaction');
+				endif;
+			endif;
+		endif;
+		if($financeSubheadId <= 0 && $itemclass_id > 0):
+			$financeSubheadId = (int)$this->getDefinedTable(Stock\ItemClassTable::class)->getColumn($itemclass_id, 'finance_transaction');
+		endif;
+		if((int)$financeSubheadId > 0):
+			$sub_head = $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.id' => (int)$financeSubheadId));
+		endif;
+		endif;
 		
 		//print_r($item);exit;
 		$subheadlist ="<option value=''></option>";
 		foreach($sub_head as $row):
-			$subheadlist .="<option value='".$row['id']."'>".$row['name']."</option>";
+			$selected = ((int)$row['id'] === (int)$financeSubheadId) ? " selected" : "";
+			$subheadlist .="<option value='".$row['id']."'".$selected.">".$row['name']."</option>";
 		endforeach;
 		
 		echo json_encode(array(
@@ -618,7 +603,19 @@ class PurchaseController extends AbstractActionController
 	public function getuomAction()
 	{
 		$form = $this->getRequest()->getPost();
-		$itemId =$form['itemId'];
+		$isAsset = isset($form['isAsset']) ? (int)$form['isAsset'] : 0;
+		$itemId = isset($form['itemId']) ? (int)$form['itemId'] : 0;
+		if($isAsset === 1):
+			$uomop = "<option value=''></option>";
+			$uomList = $this->getDefinedTable(Stock\UomTable::class)->getAll();
+			foreach($uomList as $uoms):
+				$uomop .= "<option value='" . $uoms['id'] . "'>" . $uoms['code'] . "</option>";
+			endforeach;
+			echo json_encode(array(
+					'uom' => $uomop,
+			));
+			exit;
+		endif;
 		$item = $this->getDefinedTable(Stock\ItemTable::class)->get(array('i.id'=>$itemId));
 		$selectedUomId = $item[0]['uom'];
 		$uom = $this->getDefinedTable(Stock\UomTable::class)->get(array('id' => $selectedUomId));

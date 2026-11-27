@@ -41,9 +41,7 @@
 					</div>-->
 					<div class="widget-toolbar hidden-xs">
 						<div class="btn-group">
-							<a class="btn btn-xs btn-danger" data-toggle="modal" data-target="#modal" href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "2-".$pr_id)); ?>" title="View Activity Logs">
-								<i class="ace-icon fa fa-plus bigger-120" ></i>  
-							</a> 
+							<?php echo $this->button(6, "2-".$pr_id, 0, 3);?> 
 							<a class="btn btn-xs" id="print" title="Print">
 								<i class="ace-icon fa fa-file-pdf-o bigger-120"></i>
 							</a>
@@ -121,14 +119,21 @@
 										<?php 
 											$sl = 1;
 											$pr_details = $this->PRDetailsObj->get(array('purchase_receipt' => $pr_id));
-											$podetails= $this->po_detailsObj->get(array('purchase_order'=>$purchase_order));
-											foreach($podetails as $podetails);
 											foreach($pr_details as $tdrow):
+											$itemValue = isset($tdrow['item']) ? (int)$tdrow['item'] : 0;
+											$itemLabel = '';
+											if($itemValue > 0):
+												$itemLabel = $this->itemObj->getColumn($itemValue, 'name');
+											elseif(!empty($tdrow['item_name'])):
+												$itemLabel = $tdrow['item_name'];
+											elseif(isset($tdrow['item']) && !is_numeric($tdrow['item'])):
+												$itemLabel = $tdrow['item'];
+											endif;
 											//echo "<pre>";print_r($tdrow);
 										?>
 											<tr>
 												<td><?php echo $sl++;?></td>
-												<td><?php echo ($podetails['item_class']==33)?$tdrow['item']:$this->itemObj->getColumn($tdrow['item'],'name');?></td>
+												<td><?php echo $itemLabel;?></td>
 												<td><?php echo $tdrow['po_quantity'];?></td>
 												<td><?php echo $tdrow['rate'];?></td>
 												<td><?php echo $tdrow['damage_qty'];?></td>

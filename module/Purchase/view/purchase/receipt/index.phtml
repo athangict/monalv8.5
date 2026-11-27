@@ -41,13 +41,16 @@ $this->headTitle($this->title);
 				<div class="form-group col-lg-2">
 					<label class="control-label" for="location">Location</label>
 					<select class="form-control" id="location" name="location" data-placeholder="location" onchange='this.form.submit()'>
-						<option value="-1" <?php echo ($data['location'] == '-1')?'selected':'';?>>All</option>
-						<?php 
-							$location = $this->locationObj->getAll();
-							foreach($location as $location):
-								$selected_act = ($location['id'] == $data['location'])?'selected':'';
+						<?php
+							$allowedLocationIds = isset($this->permittedLocations) && is_array($this->permittedLocations) ? $this->permittedLocations : array();
+							$locationRows = $this->locationObj->getAll();
+							foreach($locationRows as $location):
+								if (!empty($allowedLocationIds) && !in_array((string) $location['id'], $allowedLocationIds, true)):
+									continue;
+								endif;
+								$selected_act = ((string) $location['id'] === (string) $data['location'])?'selected':'';
 						?>
-							<option value="<?php echo $location['id']?>" <?php echo $selected_act;?>>
+							<option value="<?php echo $location['id'];?>" <?php echo $selected_act;?>>
 								<?php echo $location['location'];?>
 							</option>
 						<?php endforeach;?>

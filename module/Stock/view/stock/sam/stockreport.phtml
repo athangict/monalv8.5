@@ -153,11 +153,29 @@
 						$dispatchpending=$this->dispatchObj->getSumPending($row['location'],$row['item'],$data);
 						//get dispatch for from location for previous month and it is used for finding the opening stock
 						$prefromdispatch=$this->dispatchObj->getPreSumfrom($row['location'],$row['item'],$data);
+						$current_issue = $this->issueObj->fetchSRQuantitySUM(
+							$data['start_date'],
+							$data['end_date'],
+							$row['location'],
+							array('dd.item' => $row['item'], 'd.status' => array(2,3,10)),
+							'd.issue_date',
+							'd.from_location',
+							'dd.quantity'
+						);
+						$pre_issue = $this->issueObj->fetchSROpeningSUM(
+							$data['start_date'],
+							$row['location'],
+							array('dd.item' => $row['item'], 'd.status' => array(2,3,10)),
+							'd.issue_date',
+							'd.from_location',
+							'dd.quantity'
+						);
 						$openingQty = $row['opening_qty'];
 						// Calculate opening quantity based on conditions 
-						$result = $openingQty - $pre_sale-$prefromdispatch+$pretodispatch+$pre_pur;
-						$closing=$result-$current_sale-$fromdispatch+$todispatch+$current_pur;
+						$result = $openingQty - $pre_sale - $prefromdispatch - $pre_issue + $pretodispatch + $pre_pur;
+						$closing=$result - $current_sale - $fromdispatch - $current_issue + $todispatch + $current_pur;
 						$pur_rate=$this->purchaseObj->getrate(array('p.location'=>$row['location'],'pd.item'=>$row['item']),$data);;
+						$fromDispatchQty = (($fromdispatch=="") ? 0 : $fromdispatch) + (($current_issue=="") ? 0 : $current_issue);
 					?>
 						<tr>
 							<td><?php echo $i++;?></td>
@@ -171,7 +189,7 @@
 							<td><?php echo ($current_pur!="")?$current_pur*$pur_rate:0;?></td>
 							<td><?php echo ($todispatch=="")?0:$todispatch;?></td>
 							<td><?php echo $dispatchpending;?></td>
-							<td><?php echo ($fromdispatch=="")?0:$fromdispatch;?></td>
+							<td><?php echo $fromDispatchQty; ?></td>
 							<td><?php echo ($current_sale!="")?$current_sale:0;?></td>
 							<td><?php echo $row['selling_price'];?></td>
 							<td><?php echo number_format((float)$row['selling_price']*$current_sale,4,'.',',');?></td>
@@ -217,6 +235,7 @@
 		</div>
 	</div>
 </div>
+
 <script type="text/javascript">
 $('document').ready(function(){
 	$('#dataTables').DataTable({

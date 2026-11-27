@@ -12,7 +12,7 @@
 		},spec);
 		var tr_id =0;
 		var parentObj = $(this);
-		parentObj.wrap("<div style='overflow-x:scroll;margin-bottom:5px;'> </div>");
+		parentObj.wrap("<div class='issue-table-wrap' style='margin-bottom:5px;overflow:visible;'> </div>");
 		parentObj.find("tbody tr").each(function(){
 			$(this).attr('id',++tr_id);			
 			$(this).find('div.chosen-search input').each(function(){
@@ -193,7 +193,7 @@
 		},spec);
 		var tr_id =0;
 		var parentObj = $(this);
-		parentObj.wrap("<div style='overflow-x:scroll;margin-bottom:5px;'> </div>");
+		parentObj.wrap("<div class='issue-table-wrap' style='margin-bottom:5px;overflow:visible;'> </div>");
 		parentObj.find("tbody tr").each(function(){
 			$(this).attr('id',++tr_id);			
 			$(this).find('div.chosen-search input').each(function(){
@@ -284,7 +284,7 @@
 		
 		var tr_id =0;
 		var parentObj = $(this);
-		parentObj.wrap("<div style='overflow-x:scroll;margin-bottom:5px;'> </div>");
+		parentObj.wrap("<div class='issue-table-wrap' style='margin-bottom:5px;overflow:visible;'> </div>");
 		parentObj.find("tbody tr").each(function(){
 			$(this).attr('id',++tr_id);			
 			$(this).find('div.chosen-search input').each(function(){
@@ -2102,6 +2102,9 @@
 		$('#quantity-'+id).val('0.00');
 		$('#remarks-'+id).val('');
 		obj.find(':input:hidden').each(function(){$(this).val('');});
+		if($('#assetssp-'+id).length > 0){
+			$('#assetssp-'+id).val('0');
+		}
 		obj.find(':input[data-fv-field]').each(function() {
 			$('form').formValidation('resetField',$(this));
 		});	
@@ -3166,7 +3169,94 @@
 			$('form').formValidation('revalidateField',$(this));
 		});	
 	};
-	
+/*##################################################################
+  #  function to append new row while adding sitting fee           #
+  ##################################################################*/
+	$.fn.sittingFeeRows = function(){
+		return this.each(function(){
+			var table = $(this);
+			var rowId = 0;
+			var rows = table.find('tbody tr');
+
+			function setRowId(row, id){
+				row.attr('id', id);
+				row.find(':input').each(function(){
+					var inputId = $(this).attr('id');
+					if(inputId){
+						inputId = inputId.replace(/-\d+$/, '');
+						$(this).attr('id', inputId+'-'+id);
+					}
+				});
+			}
+
+			function updateDeleteButtons(){
+				table.find('tbody tr').each(function(){
+					var actionCell = $(this).find('td:last');
+					actionCell.html("<a class='btn btn-warning btn-xs delRow' role='button' aria-label='Remove row'><i class='fa fa-times'></i></a>");
+				});
+			}
+
+			function calculateTotals(){
+				var totalAmount = 0;
+				var totalDeduction = 0;
+				var totalPayment = 0;
+
+				table.find('tbody tr').each(function(){
+					var row = $(this);
+					var amount = parseFloat(row.find('.tr_amount').val()) || 0;
+					var deduction = amount * 0.02;
+					var payment = amount - deduction;
+
+					row.find('.tr_deduction').val(deduction.toFixed(2));
+					row.find('.tr_pamount').val(payment.toFixed(2));
+					totalAmount += amount;
+					totalDeduction += deduction;
+					totalPayment += payment;
+				});
+
+				$('#total_amount').val(totalAmount.toFixed(2));
+				$('#total_deduction').val(totalDeduction.toFixed(2));
+				$('#total_pamount').val(totalPayment.toFixed(2));
+			}
+
+			rows.each(function(){
+				setRowId($(this), ++rowId);
+			});
+			updateDeleteButtons();
+
+			var addButton = "<div class='row'><div class='col-lg-12'><a id='addRow' class='pull-right btn btn-success btn-xs' role='button'><i class='fa fa-plus'></i> Add Row</a></div></div>";
+			table.after(addButton);
+
+			table.on('click', '.delRow', function(){
+				var row = $(this).closest('tr');
+				if(table.find('tbody tr').length === 1){
+					row.find('select').val('').trigger('chosen:updated');
+					row.find(':input').not('select').val('');
+				}else{
+					row.remove();
+				}
+				updateDeleteButtons();
+				calculateTotals();
+			});
+
+			table.next('.row').find('#addRow').on('click', function(){
+				var row = table.find('tbody tr:last').clone(false);
+				setRowId(row, ++rowId);
+				row.find('.chosen-container').remove();
+				row.find('select').each(function(){
+					$(this).removeClass('chosen-done').removeData('chosen').val('');
+				});
+				row.find(':input').not('select').val('');
+				table.find('tbody').append(row);
+				updateDeleteButtons();
+				row.find('select').chosen();
+				calculateTotals();
+			});
+
+			table.on('input', '.tr_amount', calculateTotals);
+			calculateTotals();
+		});
+	};
 	function trns_reset(obj, options){
 		var id = obj.attr('id');
 		$('#debit-'+id).val('0.00');
@@ -4884,52 +4974,138 @@
 				getItem: '',
 				getDetails: '',
 				getStockBalance: '',
+				getIssueDepartments: 'getissuedepartment',
+				getIssueEmployees: 'getissuedtoemployee',
 		},spec);
-		/***** Get the Item of the Activity *****/
-		$("#item_group").change(function() {
-			$.post(
-				options.getItem,
-				{
-					item_group: $(this).val(),
-                    source_loc: $('#from_location').val(),
-				},
-				function(data){
-					//console.log(data);
-					$('.tr-item').html(data.items);
-					$('.tr-item').trigger('chosen:updated');
-				},
-				'json'
-			);
-			$(".tr-item").each(function(){
-				issue_reset($(this).closest('tr'));
-			});
-		});
-		/**** Get Source and Destination Quantities ***/
-		$('#from_location,#to_location').change(function(){
-			var id = 1;
+		var revalidateIssueField = function(fieldObj){
+			if(typeof $('form').formValidation === 'function'){
+				$('form').formValidation('revalidateField',fieldObj);
+			}
+		};
+		var formatIssueDecimal = function(value){
+			var num = parseFloat(value);
+			return ($.isNumeric(num)) ? num.toFixed(2) : '0.00';
+		};
+		var loadIssueStockBalance = function(id, assetsspId){
 			$.post(
 				options.getStockBalance,
 				{
-					assetssp_id: $('#assetssp-'+id).val(),
+					assetssp_id: assetsspId,
 					source_loc: $('#from_location').val(),
 					destination_loc: $('#to_location').val(),
 					item_id: $('#item-'+id).val(),
 				},
 				function(data){
-					//console.log(data);
 					$('#uom-'+id).html(data.uom);
 					$('#uom-'+id).trigger('chosen:updated');
-					$('#rate-'+id).val(data.rate);
-					$('#from_balance-'+id).val(data.source_qty);
-					$('#to_balance-'+id).val(data.destination_qty);
-					$('form').formValidation('revalidateField',$('#assetssp-'+id));
+					$('#rate-'+id).val(formatIssueDecimal(data.rate));
+					$('#from_balance-'+id).val(formatIssueDecimal(data.source_qty));
+					$('#to_balance-'+id).val(formatIssueDecimal(data.destination_qty));
 				},
 				'json'
 			);
+		};
+
+		if($('#to_location').length > 0 && $('#department').length === 0){
+			var issueRow = $('#item_group').closest('.row');
+			var destinationCol = $('#to_location').closest('.col-lg-3');
+			destinationCol.hide();
+			issueRow.append(
+				"<div class='col-lg-3'><div class='form-group'>"
+				+ "<label for='department' class='control-label'>Department</label>"
+				+ "<select id='department' name='department' class='form-control' data-placeholder='Select' required><option value=''></option></select>"
+				+ "</div></div>"
+				+ "<div class='col-lg-3'><div class='form-group'>"
+				+ "<label for='issued_to' class='control-label'>Issue To Employee</label>"
+				+ "<select id='issued_to' name='issued_to' class='form-control' data-placeholder='Select' required><option value=''></option></select>"
+				+ "</div></div>"
+			);
+			$('form select').chosen();
+			$.post(
+				options.getIssueDepartments,
+				{},
+				function(data){
+					$('#department').html(data.departments);
+					$('#department').trigger('chosen:updated');
+				},
+				'json'
+			);
+			$('#department').change(function(){
+				$('#issued_to').html("<option value=''></option>").trigger('chosen:updated');
+				$('#to_location').val('');
+				$.post(
+					options.getIssueEmployees,
+					{
+						department: $(this).val(),
+					},
+					function(data){
+						$('#issued_to').html(data.employees);
+						$('#issued_to').trigger('chosen:updated');
+					},
+					'json'
+				);
+			});
+			$('#issued_to').change(function(){
+				var locationId = $('#issued_to option:selected').data('location') || '';
+				$('#to_location').val(locationId).trigger('chosen:updated');
+				revalidateIssueField($('#to_location'));
+			});
+		}
+		var loadIssueItems = function(itemGroup){
+			var requestData = {
+				source_loc: $('#from_location').val(),
+			};
+			if(typeof itemGroup !== 'undefined' && itemGroup !== ''){
+				requestData.item_group = itemGroup;
+			}
+			$.post(
+				options.getItem,
+				requestData,
+				function(data){
+					$('.tr-item').each(function(){
+						var selectedValue = $(this).val();
+						var selectedText = $(this).find('option:selected').text();
+						$(this).html(data.items);
+						if(selectedValue && $(this).find("option[value='" + selectedValue + "']").length === 0){
+							$(this).append("<option value='" + selectedValue + "'>" + selectedText + "</option>");
+						}
+						if(selectedValue){
+							$(this).val(selectedValue);
+						}
+						$(this).trigger('chosen:updated');
+					});
+				},
+				'json'
+			);
+			$(".tr-item").each(function(){
+				var rowObj = $(this).closest('tr');
+				var detailsId = rowObj.find('input[name="details_id[]"]').val();
+				if(detailsId && parseInt(detailsId, 10) > 0){
+					return;
+				}
+				issue_reset(rowObj);
+			});
+		};
+		/***** Get the Item of the Activity *****/
+		if($('#item_group').length > 0){
+			$("#item_group").change(function() {
+				loadIssueItems($(this).val());
+			});
+		} else {
+			loadIssueItems();
+			$('#from_location').change(function(){
+				loadIssueItems();
+			});
+		}
+		/**** Get Source and Destination Quantities ***/
+		$('#from_location,#to_location').change(function(){
+			var id = 1;
+			loadIssueStockBalance(id, $('#assetssp-'+id).val());
+			revalidateIssueField($('#assetssp-'+id));
 		});
 		var tr_id =0;
 		var parentObj = $(this);
-		parentObj.wrap("<div style='overflow-x:scroll;margin-bottom:5px;'> </div>");
+		parentObj.wrap("<div class='issue-table-wrap' style='margin-bottom:5px;overflow:visible;'> </div>");
 		parentObj.find("tbody tr").each(function(){
 			$(this).attr('id',++tr_id);			
 			$(this).find('div.chosen-search input').each(function(){
@@ -4947,8 +5123,8 @@
 			$(this).find('select.tr-item').each(function(){
 				$(this).bind('change', function(){
 					if($('#from_location').val()=="" || $('#to_location').val()==""){
-						$('form').formValidation('revalidateField',$('#from_location'));
-						$('form').formValidation('revalidateField',$('#to_location'));
+						revalidateIssueField($('#from_location'));
+						revalidateIssueField($('#to_location'));
 					}
 				    var id = $(this).closest('tr').attr('id')
 					$.post(
@@ -4959,10 +5135,11 @@
 							destination_loc: $('#to_location').val(),
 						},
 						function(data){
-							$('#assetssp-'+id).html(data.assetssp);
-							$('#assetssp-'+id+' option:selected').removeAttr('selected');
-							$('#assetssp-'+id).trigger('chosen:updated');
-							$('form').formValidation('revalidateField',$('#assetssp-'+id));
+							var assetsspOptions = $('<select>'+data.assetssp+'</select>').find('option[value!=""]');
+							var defaultAssetSsp = (assetsspOptions.length > 0) ? assetsspOptions.first().val() : 0;
+							$('#assetssp-'+id).val(defaultAssetSsp);
+							loadIssueStockBalance(id, defaultAssetSsp);
+							revalidateIssueField($('#assetssp-'+id));
 						},
 						'json'
 					)
@@ -4972,42 +5149,102 @@
 				$(this).bind('change', function(){
 					var id = $(this).closest('tr').attr('id');
 					if($('#from_location').val()=="" || $('#to_location').val()==""){
-						$('form').formValidation('revalidateField',$('#from_location'));
-						$('form').formValidation('revalidateField',$('#to_location'));
+						revalidateIssueField($('#from_location'));
+						revalidateIssueField($('#to_location'));
 					}
-					$.post(
-						options.getStockBalance,
-						{
-							assetssp_id: $(this).val(),
-							source_loc: $('#from_location').val(),
-							destination_loc: $('#to_location').val(),
-							item_id: $('#item-'+id).val(),
-						},
-						function(data){
-							//console.log(data);
-							$('#uom-'+id).html(data.uom);
-							$('#uom-'+id).trigger('chosen:updated');
-							$('#rate-'+id).val(data.rate);
-							$('#from_balance-'+id).val(data.source_qty);
-							$('#to_balance-'+id).val(data.destination_qty);
-						},
-						'json'
-					);
+					loadIssueStockBalance(id, $(this).val());
 				});
 			});
 	        
 			issue_delbtn(parentObj);
 		});
 		if($('#addRow').length == 0){
-			var addbutton = "<div class='row'><div class='col-lg-12'><a value='Add' id='addRow' class='pull-right btn btn-success btn-xs' ><i class='fa fa-plus'></i> Add Row</a>&nbsp;&nbsp;&nbsp;&nbsp;</div></div>";
-			$(this).parent().parent().parent().append(addbutton);
+			var addbutton = "<div class='col-lg-12'><a value='Add' id='addRow' class='pull-right btn btn-success btn-xs' ><i class='fa fa-plus'></i> Add Row</a>&nbsp;&nbsp;&nbsp;&nbsp;</div>";
+			$(this).closest('.row').append(addbutton);
 		};		
 		$("#addRow").click(function(){
+			if(!issue_canAddRow(parentObj)){
+				return false;
+			}
 			issue_addrow(parentObj, options.getDetails, options.getStockBalance);			     
 		});	
         issue_calculation(parentObj);					
 	};	
+	function issue_warn(message){
+		if(typeof toastr !== 'undefined' && typeof toastr.warning === 'function'){
+			toastr.warning(message);
+		}
+	}
+	function issue_getRowKey(id){
+		return [$('#item-'+id).val(), $('#assetssp-'+id).val()].join('|');
+	}
+	function issue_getTotalIssueQty(obj, key, excludeId){
+		var total = 0;
+		obj.find('tbody tr').each(function(){
+			var rid = $(this).attr('id');
+			if(excludeId && rid == excludeId){
+				return;
+			}
+			if(issue_getRowKey(rid) !== key){
+				return;
+			}
+			var qty = parseFloat($('#quantity-'+rid).val());
+			total += $.isNumeric(qty) ? qty : 0;
+		});
+		return total;
+	}
+	function issue_enforceRowQuantity(rowObj, silent){
+		var id = rowObj.attr('id');
+		var item = $('#item-'+id).val();
+		var assetssp = $('#assetssp-'+id).val();
+		if(!item || !assetssp){
+			return;
+		}
+		var stock = parseFloat($('#from_balance-'+id).val());
+		if(!$.isNumeric(stock) || stock <= 0){
+			return;
+		}
+		var key = issue_getRowKey(id);
+		var currentQty = parseFloat($('#quantity-'+id).val());
+		currentQty = $.isNumeric(currentQty) ? currentQty : 0;
+		var othersQty = issue_getTotalIssueQty(rowObj.closest('table'), key, id);
+		var allowedQty = stock - othersQty;
+		if(allowedQty < 0){
+			allowedQty = 0;
+		}
+		if(currentQty > allowedQty){
+			$('#quantity-'+id).val(parseFloat(allowedQty).toFixed(2));
+			if(!silent){
+				issue_warn('Issue quantity cannot exceed available stock quantity.');
+			}
+		}
+	}
+	function issue_canAddRow(obj){
+		var lastRow = obj.find("tbody tr:last");
+		if(lastRow.length === 0){
+			return true;
+		}
+		var id = lastRow.attr('id');
+		var item = $('#item-'+id).val();
+		var assetssp = $('#assetssp-'+id).val();
+		if(!item || !assetssp){
+			return true;
+		}
+		var stock = parseFloat($('#from_balance-'+id).val());
+		if(!$.isNumeric(stock) || stock <= 0){
+			return true;
+		}
+		var remainingQty = stock - issue_getTotalIssueQty(obj, issue_getRowKey(id));
+		if(remainingQty <= 0){
+			issue_warn('Cannot add more rows. Available stock quantity is already fully used.');
+			return false;
+		}
+		return true;
+	}
 	function issue_addrow(obj, getDetails, getStockBalance){
+		if(!issue_canAddRow(obj)){
+			return;
+		}
 		
 		var lastRow = obj.find("tbody tr:last").attr('id');
 		var tmplt_row = obj.find("tbody tr:last").clone(true);
@@ -5035,8 +5272,10 @@
 		clone.find('select.tr-item').each(function(){
 		$(this).bind('change', function(){
 			if($('#from_location').val()=="" || $('#to_location').val()==""){
-				$('form').formValidation('revalidateField',$('#from_location'));
-				$('form').formValidation('revalidateField',$('#to_location'));
+				if(typeof $('form').formValidation === 'function'){
+					$('form').formValidation('revalidateField',$('#from_location'));
+					$('form').formValidation('revalidateField',$('#to_location'));
+				}
 			}
 			var id = $(this).closest('tr').attr('id');
 				$.post(
@@ -5047,10 +5286,26 @@
 						destination_loc: $('#to_location').val(),
 					},
 					function(data){
-						//console.log(data);
-						$('#assetssp-'+id).html(data.assetssp);
-						$('#assetssp-'+id+' option:selected').removeAttr('selected');
-						$('#assetssp-'+id).trigger('chosen:updated');
+						var assetsspOptions = $('<select>'+data.assetssp+'</select>').find('option[value!=""]');
+						var defaultAssetSsp = (assetsspOptions.length > 0) ? assetsspOptions.first().val() : 0;
+						$('#assetssp-'+id).val(defaultAssetSsp);
+						$.post(
+							getStockBalance,
+							{
+								assetssp_id: defaultAssetSsp,
+								source_loc: $('#from_location').val(),
+								destination_loc: $('#to_location').val(),
+								item_id: $('#item-'+id).val(),
+							},
+							function(stockData){
+								$('#uom-'+id).html(stockData.uom);
+								$('#uom-'+id).trigger('chosen:updated');
+								$('#rate-'+id).val(formatIssueDecimal(stockData.rate));
+								$('#from_balance-'+id).val(formatIssueDecimal(stockData.source_qty));
+								$('#to_balance-'+id).val(formatIssueDecimal(stockData.destination_qty));
+							},
+							'json'
+						);
 					},
 					'json'
 				)
@@ -5059,8 +5314,10 @@
 		clone.find('select.tr-assetssp').each(function(){
 		$(this).bind('change', function(){					
 			if($('#from_location').val()=="" || $('#to_location').val()==""){
-				$('form').formValidation('revalidateField',$('#from_location'));
-				$('form').formValidation('revalidateField',$('#to_location'));
+				if(typeof $('form').formValidation === 'function'){
+					$('form').formValidation('revalidateField',$('#from_location'));
+					$('form').formValidation('revalidateField',$('#to_location'));
+				}
 			}
 			var id = $(this).closest('tr').attr('id');
 			var cur_val = $(this).val();
@@ -5078,9 +5335,9 @@
 					function(data){
 						$('#uom-'+id).html(data.uom);
 						$('#uom-'+id).trigger('chosen:updated');
-						$('#rate-'+id).val(data.rate);
-						$('#from_balance-'+id).val(data.source_qty);
-						$('#to_balance-'+id).val(data.destination_qty);
+						$('#rate-'+id).val(formatIssueDecimal(data.rate));
+						$('#from_balance-'+id).val(formatIssueDecimal(data.source_qty));
+						$('#to_balance-'+id).val(formatIssueDecimal(data.destination_qty));
 					},
 					'json'
 				    )
@@ -5144,8 +5401,16 @@
 	function issue_calculation(obj){
 		obj.find('tbody tr').each(function(){
 			var id = $(this).attr('id');
-			$('#rate-'+id).on('change',function(){issue_calamt($(this).closest("tr"));});
-			$('#quantity-'+id).on('change',function(){issue_calamt($(this).closest("tr"));});			
+			var rowRate = parseFloat($('#rate-'+id).val());
+			var rowStock = parseFloat($('#from_balance-'+id).val());
+			$('#rate-'+id).val($.isNumeric(rowRate) ? rowRate.toFixed(2) : '0.00');
+			$('#from_balance-'+id).val($.isNumeric(rowStock) ? rowStock.toFixed(2) : '0.00');
+			if($('#to_balance-'+id).length){
+				var rowToStock = parseFloat($('#to_balance-'+id).val());
+				$('#to_balance-'+id).val($.isNumeric(rowToStock) ? rowToStock.toFixed(2) : '0.00');
+			}
+			$('#rate-'+id).off('input.issuecal change.issuecal keyup.issuecal').on('input.issuecal change.issuecal keyup.issuecal',function(){issue_calamt($(this).closest("tr"));});
+			$('#quantity-'+id).off('input.issuecal change.issuecal keyup.issuecal').on('input.issuecal keyup.issuecal',function(){issue_calamt($(this).closest("tr"), true);}).on('change.issuecal',function(){issue_calamt($(this).closest("tr"));});			
 		});
 		var netamt = 0;
 		obj.find('tbody tr').each(function(){
@@ -5155,7 +5420,8 @@
 		var value = parseFloat(netamt).toFixed(2);
 		$('#po_amount').val(($.isNumeric(value))? value:'0.00');
 	};
-	function issue_calamt(obj){
+	function issue_calamt(obj, silent){
+		issue_enforceRowQuantity(obj, silent === true);
 		var id = obj.closest("tr").attr('id');
 		var rate = parseFloat($('#rate-'+id).val());
 		var quantity = parseFloat($('#quantity-'+id).val());

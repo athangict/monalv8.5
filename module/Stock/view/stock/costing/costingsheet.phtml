@@ -104,9 +104,7 @@
 						   <a class="btn btn-xs btn-success" href="<?php echo $this->url('cost', array('action' => 'sheetdetail', 'id' => $sheet['id'])); ?>" title="view details">
 										<i class="ace-icon fa fa-eye bigger-120" ></i>  
 						  </a>
-						   <a data-toggle="modal" data-target = "#modal" class="btn btn-xs btn-danger" href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "9-".$sheet['id'])); ?>" title="View Activity Logs">
-										<i class="ace-icon fa fa-plus bigger-120" ></i>  
-						  </a></div>
+						   <?php echo $this->button(6, "9-".$sheet['id'], 0, 3);?></div>
 						 </td>		          				          				          
 				        </tr>
 				  <?php endforeach; ?>

@@ -6,15 +6,44 @@
  */
 ?>
 <?php 
-	foreach($repair as $row);
-		extract($row); 
-             $rm_id = $row['id'];
-                $rm_status = $row['status'];
-				//print_r($row);
-//endforeach;exit;
+	$repairRow = array();
+	if (is_array($repair)):
+		foreach($repair as $row):
+			$repairRow = $row;
+			break;
+		endforeach;
+	endif;
+	if (!empty($repairRow)):
+		extract($repairRow);
+	endif;
+	$rm_id = isset($repairRow['id']) ? $repairRow['id'] : 0;
+	$rm_status = isset($repairRow['status']) ? $repairRow['status'] : 0;
+	$status = isset($repairRow['status']) ? $repairRow['status'] : 0;
+	$location = isset($repairRow['location']) ? $repairRow['location'] : '';
+	$work_order_date = isset($repairRow['work_order_date']) ? $repairRow['work_order_date'] : '';
+	$repair_no = isset($repairRow['repair_no']) ? $repairRow['repair_no'] : '';
+	$total_amount = isset($repairRow['total_amount']) ? (float)$repairRow['total_amount'] : 0.0;
+	$transaction = isset($repairRow['transaction']) ? (int)$repairRow['transaction'] : 0;
+	$remarks = isset($repairRow['remarks']) ? $repairRow['remarks'] : '';
+	$location_id = isset($repairRow['location_id']) ? (int)$repairRow['location_id'] : 0;
+
+	$detailRows = $this->RMDObject->get(array('repair' =>$id));
+	$detailRow = array();
+	foreach($detailRows as $singleDetail):
+		$detailRow = $singleDetail;
+		break;
+	endforeach;
+	$partyId = isset($detailRow['party']) ? (int)$detailRow['party'] : 0;
+	$referenceNo = isset($detailRow['ref_no']) ? $detailRow['ref_no'] : '';
+
 	$roles=explode(',', (string) $role);
 	$count=0;
+	$isHighestRole = false;
 	for($i=0;$i<sizeof($roles);$i++){
+		$currentRole = trim($roles[$i]);
+		if($currentRole === '99' || $currentRole === '100'){
+			$isHighestRole = true;
+		}
 		if($roles[$i]==2 ||$roles[$i]==3){
 			$count=1;
 			break;
@@ -23,36 +52,42 @@
 			$count=0;
 		}
 	}
-	
-
-	foreach($this->RMDObject->get(array('repair' =>$id)) as $repair);
 ?>
 <style>
 	.mytable tr th,.mytable tr td {
 		padding:5px;
+	}
+	.expense-detail-header {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 4px 12px;
+	}
+	.expense-detail-actions {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin-left: auto;
+		padding: 4px 10px;
 	}
 </style>
 <div class="row">
 	<div class="col-lg-12">
 		<div class="widget widget-box">
 			<form method="post" action="<?php echo $this->url('vehicle', array('action' => 'viewrepair')); ?>" >
-				<div class="widget-header">
+				<div class="widget-header expense-detail-header">
 					<h5 class="widget-title lighter smaller">
 						# Transport Expense Details:<strong>&nbsp;&nbsp;<?php echo $location; ?> | <?php //echo $supplier; ?> | <?php //echo $cost_center ?></strong>&nbsp;
 						<?php $this->status($status);?>
 					</h5>
-					<div class="widget-toolbar hidden-xs">
-							<button type="button" id="rm_btn" class="btn btn-white btn-warning btn-bold btn-xs"><i class="fa fa-plus"></i> <a href="<?php echo $this->url('vehicle', array('action'=>'addrepair'));?>"> Add New Repair and Maintanese</a></button>
-					</div>
-					<div class="widget-toolbar hidden-xs">
-						<div class="btn-group">
-							<a class="btn btn-xs btn-danger" data-toggle="modal" data-target="#modal" href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "30-".$rm_id )); ?>" title="View Activity Logs">
-								<i class="ace-icon fa fa-plus bigger-120" ></i>  
-							</a> 
-							<a class="btn btn-xs" id="print" title="Print">
-								<i class="ace-icon fa fa-file-pdf-o bigger-120"></i>
-							</a>
-						</div>
+					<div class="expense-detail-actions hidden-xs">
+						<a class="btn btn-white btn-warning btn-bold btn-xs" href="<?php echo $this->url('vehicle', array('action'=>'addrepair'));?>">
+							<i class="fa fa-plus"></i> Add New Repair and Maintanese
+						</a>
+						<?php echo $this->button(6, '30-'.$rm_id, 0, 3);?>
+						<a class="btn btn-xs" id="print" title="Print">
+							<i class="ace-icon fa fa-file-pdf-o bigger-120"></i>
+						</a>
 					</div>
 				</div>
 			</form>
@@ -64,7 +99,7 @@
 								<ul class="list-unstyled spaced">
 								    <li>
 										<i class="ace-icon fa fa-caret-right blue"></i>
-										<b>Work Order Date : </b><?php echo $this->dateformat($work_order_date); ?>
+										<b>Work Order Date : </b><?php echo ($work_order_date !== '') ? $this->dateformat($work_order_date) : ''; ?>
 									</li>
 									<li>
 										<i class="ace-icon fa fa-caret-right blue"></i>
@@ -86,15 +121,15 @@
 								<ul class="list-unstyled spaced">
 								    <li>
 										<i class="ace-icon fa fa-caret-right blue"></i>
-										<b> Voucher No. : </b> <?php echo $this->transObj->getColumn($transaction,'voucher_no'); ?> 
+										<b> Voucher No. : </b> <?php echo ($transaction > 0) ? $this->transObj->getColumn($transaction,'voucher_no') : ''; ?> 
 									</li>
 									<li>
 										<i class="ace-icon fa fa-caret-right blue"></i>
-										<b>Party : </b><?php echo $this->partyObj->getColumn($repair['party'],'name'); ?> 
+										<b>Party : </b><?php echo ($partyId > 0) ? $this->partyObj->getColumn($partyId,'name') : ''; ?> 
 									</li>
 									<li>
 										<i class="ace-icon fa fa-caret-right blue"></i>
-										<b>Refernece Number : </b><?php echo $repair['ref_no']; ?> 
+										<b>Refernece Number : </b><?php echo $referenceNo; ?> 
 									</li>
 								</ul>
 							</div>
@@ -124,11 +159,11 @@
 									</thead>
 									<tbody>
 										<?php $sl = 1; 
-											foreach($this->RMDObject->get(array('repair' =>$id)) as $tdrow):
+											foreach($detailRows as $tdrow):
 											?>
 											<tr>
 												<td><?php echo $sl++; ?></td>
-												<td><?php echo $this->serviceObj->getColumn($tdrow['service'],'code');?></td>
+												<td><?php echo $this->serviceObj->getColumn($tdrow['service'],'code').'-'.$this->serviceObj->getColumn($tdrow['service'],'name');?></td>
 												<td><?php echo $this->vehicleObj->getColumn($tdrow['service_item'],'name');?></td>
 												<td><?php echo $tdrow['amount'];?></td>
 												<?php if($userID==1):?>
@@ -150,7 +185,7 @@
 					</div>
 					<div class="row">
 						<div class="col-lg-12" style="text-align: right">				
-						<?php if($status == '2' && $this->user_location == $location_id && $count==1):?>
+						<?php if($status == '2' && (($this->user_location == $location_id && $count==1) || $isHighestRole)):?>
 								<a href="<?php echo $this->url('vehicle', array('action'=>'editrepair', 'id'=>$id));?>" class="btn btn-info"> <i class="fa fa-pencil"></i> Edit </a>
 								<a data-toggle="modal" data-target="#modal" href="<?php echo $this->url('vehicle', array('action'=>'processtp', 'id'=>$id.'-1'));?>" class="btn btn-warning"> <i class="fa fa-arrow-right"></i>Apply</a>
 								<?php endif;?>
@@ -167,8 +202,9 @@
 	</div>
 </div>
 <script type="text/javascript">
-	$('#rm_btn').on('click',function(){
-		window.document.location = "<?php echo $this->url('vehicle', array('action' => 'addrepair'));?>";
+	$('#print').genpdfinvoice({
+		content: '#report-print',
+		src:"<?php echo $this->url('pdfxls', array('action' => 'pdf'));?>",
+		orentation:"L",//L =landscape, P = potrait
 	});
-
 </script>

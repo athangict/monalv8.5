@@ -50,8 +50,9 @@ $skinClass = isset($skinClassMap[$appTemplate]) ? $skinClassMap[$appTemplate] : 
                   
        <!-- Scripts -->
         <?php echo $this->headScript()
-			->prependFile($this->basePath() . '/js/ch_addrow.js')
-			->prependFile($this->basePath() . '/js/athang.js')
+			->prependFile($this->basePath() . '/js/ch_genpdf.js?v=' . filemtime(dirname(__DIR__, 4) . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'js' . DIRECTORY_SEPARATOR . 'ch_genpdf.js'))
+        	->prependFile($this->basePath() . '/js/ch_addrow.js?v=' . filemtime(dirname(__DIR__, 4) . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'js' . DIRECTORY_SEPARATOR . 'ch_addrow.js'))
+			->prependFile($this->basePath() . '/js/athang.js?v=' . filemtime(dirname(__DIR__, 4) . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'js' . DIRECTORY_SEPARATOR . 'athang.js'))
 			->prependFile($this->basePath() . '/js/canvasjs.min.js')
 			->prependFile($this->basePath() . '/js/select2.min.js')
 			->prependFile($this->basePath() . '/leaflet.fullscreen/Leaflet.fullscreen.min.js')

@@ -68,18 +68,20 @@
 							<div class="col-lg-12"> 
 								<h4>Purchase Order Details</h4>
 								<div>
-								<table id="purchase_field" nam="purchase_field"class="table small-padding">
+								<table id="purchase_field" nam="purchase_field" class="table small-padding">
 								<thead>
-									<th>Item class</th>
-									<th>Item</th>
-									<th>Subhead</th>
-									<th>Unit of Measurement</th>
-									<th>Quantity</th>
-									<th>Rate</th>
-									<th>Amount</th>
-									<th>Remarks</th>
-								</td>
-								<tbody>
+									<tr>
+										<th>Item class</th>
+										<th>Item</th>
+										<th>Subhead</th>
+										<th>Unit of Measurement</th>
+										<th>Quantity</th>
+										<th>Rate</th>
+										<th>Amount</th>
+										<th>Remarks</th>
+										<th></th>
+									</tr>
+								</thead>
 								<tbody>
 								<?php foreach ($this->po_details as $index => $po_detail): ?>
 								<tr>
@@ -116,9 +118,9 @@
 									<td class="col-lg-3 input-cell">
 										<select class="form-control tr_subhead" name="subhead[]" data-placeholder="Select" >
 											<option value=""></option>
-											<?php foreach($subheads as $subheads): ?>
-												<option value="<?php echo $subheads['id']; ?>" <?php echo ($subheads['id'] == $po_detail['subhead']) ? 'selected' : ''; ?>>
-													<?php echo $subheads['name']; ?>
+											<?php foreach($subheads as $subhead): ?>
+												<option value="<?php echo $subhead['id']; ?>" <?php echo ($subhead['id'] == $po_detail['subhead']) ? 'selected' : ''; ?>>
+													<?php echo $subhead['name']; ?>
 												</option>
 											<?php endforeach; ?>
 										</select>
@@ -139,18 +141,19 @@
 									</td>
 
 									<td class="col-lg-1 input-cell">
-										<input type="text" class="form-control tr_rate" name="rate[]" value="<?php echo $po_detail['rate']; ?>" required/>
+										<input type="text" class="form-control tr_rate" name="rate[]" value="<?php echo number_format((float)$po_detail['rate'], 2, '.', ''); ?>" required/>
 									</td>
 
 									<td class="col-lg-1 input-cell">
 										<input type="text" class="form-control tr_amount" name="amount[]" 
-											value="<?php echo $po_detail['rate'] * $po_detail['quantity']; ?>" readonly/>
+											value="<?php echo number_format((float)($po_detail['rate'] * $po_detail['quantity']), 2, '.', ''); ?>" readonly/>
 									</td>
 
 									<td class="col-lg-3 input-cell">
 										<input type="text" class="form-control tr_remarks" name="remarks[]" 
 											value="<?php echo $po_detail['remarks']; ?>" placeholder="Remarks"/>
 									</td>
+									<td class="col-lg-1 input-cell po-row-action"></td>
 
 									<!--<td>
 										<a class="btn btn-sm btn-danger" href="<?php echo $this->url('purorder', ['action'=>'delete', 'id'=>$po_detail['id']]); ?>">
@@ -160,7 +163,7 @@
 								</tr>
 								<?php endforeach; ?>
 								</tbody>
-								<table>
+								</table>
 								<div class="row"> 
 									<div class="col-lg-11"></div>
 									<button class="btn btn-xs btn-success" type="button"  onclick="purchase_field();"> <span class="fa fa-plus-square" aria-hidden="true"> Add Row</span> </button>
@@ -200,35 +203,85 @@
 
 <script type="text/javascript">	 
 var room = 1;
+	function initEditPoChosen(scopeObj){
+		if(!(window.jQuery && $.fn && $.fn.chosen)){
+			return;
+		}
+		var selects = $(scopeObj).find('select');
+		selects.each(function(){
+			if($(this).data('chosen')){
+				$(this).chosen('destroy');
+			}
+		});
+		selects.chosen({
+			width: '100%',
+			disable_search_threshold: 0
+		});
+	}
+	function reset_edit_purchase_row(rowObj){
+		rowObj.find('.tr_item_class').val('').trigger('chosen:updated').trigger('change');
+		rowObj.find('.tr_item').html('<option value="0">Select</option>').val('0').trigger('chosen:updated').trigger('change');
+		rowObj.find('.tr_subhead').html("<option value=''></option>").trigger('chosen:updated').trigger('change');
+		rowObj.find('.tr_uom').html("<option value='1'></option>").trigger('chosen:updated').trigger('change');
+		rowObj.find('.tr_quantity').val('');
+		rowObj.find('.tr_rate').val('');
+		rowObj.find('.tr_amount').val('0.00');
+		rowObj.find('.tr_remarks').val('');
+		rowObj.find('.tr_item_name').val('');
+		rowObj.find('.asst_container, #asst_container').hide();
+		rowObj.find('.item_container, #item_container').show();
+		calculateTotalsForAllRows();
+	}
+	function refresh_edit_purchase_row_buttons(){
+		var rowCount = $('#purchase_field tbody tr').length;
+		$('#purchase_field tbody tr').each(function(){
+			var actionCell = $(this).find('.po-row-action');
+			if(rowCount > 1){
+				actionCell.html("<button class='btn btn-warning btn-xs po-row-remove' type='button' style='margin-top:5px;'><i class='fa fa-times'></i></button>");
+			}else{
+				actionCell.html("<button class='btn btn-warning btn-xs po-row-reset' type='button' style='margin-top:5px;'><i class='fa fa-refresh'></i></button>");
+			}
+		});
+	}
 	function purchase_field() {
     room++;
-    var objTo = document.getElementById('purchase_field');
+    var objTo = document.querySelector('#purchase_field tbody');
     var divtest = document.createElement('tr');
     divtest.setAttribute('class', 'form-group removeclass' + room);
     
 	divtest.innerHTML = 
-    '<tr><td class="col-lg-2"><div class="form-group"><select name="item_class[]" class="form-control tr_item_class" data-placeholder="Select" required><option value="-1">Select</option><?php foreach($itemcls as $item): ?><option value="<?php echo $item['id']; ?>"><?php echo $item['item_class']; ?></option><?php endforeach; ?></select></div></td><td class="col-lg-2 input-cell"><div class="form-group" id="item_container"><select id="item" name="item[]" class="form-control tr_item" data-placeholder="Select" required><option value="0">Select</option></select></div><div class="form-group" id="asst_container" style="display:none;"><input class="form-control tr_item_name" name="item_name[]" id="item_name" data-placeholder="Select"></div></td><td class="col-lg-2 input-cell"><div class="form-group"><select id="subhead" name="subhead[]" class="form-control tr_subhead" data-placeholder="Select" required><option value=""></option></select></div></td><td class="col-lg-2 input-cell"><div class="form-group"><select id="uom" name="uom[]" class="form-control tr_uom" data-placeholder="Select" required><option value=1></option></select></div></td><td class="col-lg-1"><div class="form-group"><input type="text" class="form-control tr_quantity" id="quantity" name="quantity[]" value=""></div></td><td class="col-lg-1"><div class="form-group"><input type="text" class="form-control tr_rate" id="rate" name="rate[]" placeholder="rate"></div></td><td class="col-lg-1"><div class="form-group"><input type="text" class="form-control tr_amount" id="amount" name="amount[]" value="" readonly></div></td><td class="col-lg-2"><div class="form-group"><input type="text" class="form-control tr_remarks" id="remarks" placeholder="remarks" name="remarks[]"></div></td><td class="col-lg-1 input-cell"><div class="input-group-btn"><button class="btn btn-sm btn-danger" type="button" onclick="remove_purchase_field(' + room + ');"><span class="glyphicon-minus" aria-hidden="true"></span></button></div></td></tr>';
+    '<td class="col-lg-2"><div class="form-group"><select name="item_class[]" class="form-control tr_item_class" data-placeholder="Select" required><option value="-1">Select</option><?php foreach($itemcls as $item): ?><option value="<?php echo $item['id']; ?>"><?php echo $item['item_class']; ?></option><?php endforeach; ?></select></div></td><td class="col-lg-2 input-cell"><div class="form-group item_container"><select id="item" name="item[]" class="form-control tr_item" data-placeholder="Select" required><option value="0">Select</option></select></div><div class="form-group asst_container" style="display:none;"><input class="form-control tr_item_name" name="item_name[]" id="item_name" data-placeholder="Select"></div></td><td class="col-lg-2 input-cell"><div class="form-group"><select id="subhead" name="subhead[]" class="form-control tr_subhead" data-placeholder="Select" required><option value=""></option></select></div></td><td class="col-lg-2 input-cell"><div class="form-group"><select id="uom" name="uom[]" class="form-control tr_uom" data-placeholder="Select" required><option value=1></option></select></div></td><td class="col-lg-1"><div class="form-group"><input type="text" class="form-control tr_quantity" id="quantity" name="quantity[]" value=""></div></td><td class="col-lg-1"><div class="form-group"><input type="text" class="form-control tr_rate" id="rate" name="rate[]" placeholder="rate"></div></td><td class="col-lg-1"><div class="form-group"><input type="text" class="form-control tr_amount" id="amount" name="amount[]" value="" readonly></div></td><td class="col-lg-2"><div class="form-group"><input type="text" class="form-control tr_remarks" id="remarks" placeholder="remarks" name="remarks[]"></div></td><td class="col-lg-1 input-cell po-row-action"></td>';
 	objTo.appendChild(divtest);
-		calculateTotalAmount()
-		$(divtest).find("#item").select2();
+		initEditPoChosen(divtest);
+		refresh_edit_purchase_row_buttons();
+		calculateTotalsForAllRows();
     
 	}
 	function remove_purchase_field(rid) {
-	$('.removeclass' + rid).remove();
-	calculateTotalAmount()
+	var rowObj = $('.removeclass' + rid);
+	rowObj.remove();
+	refresh_edit_purchase_row_buttons();
+	calculateTotalsForAllRows();
 	
 	}
 	$(document).ready(function() {
-    // Initialize select2 on all current "item" dropdowns
-	var relatedItemElement = $(this).closest('tr').find('.tr_item');
-	relatedItemElement.select2({
-        placeholder: "Select an item",
-        allowClear: true
-    });
+	initEditPoChosen($('#purchase_field'));
+	refresh_edit_purchase_row_buttons();
+	$(document).on('click', '.po-row-remove', function() {
+		var rowObj = $(this).closest('tr');
+		rowObj.remove();
+		refresh_edit_purchase_row_buttons();
+		calculateTotalsForAllRows();
+	});
+	$(document).on('click', '.po-row-reset', function() {
+		reset_edit_purchase_row($(this).closest('tr'));
+	});
 });
 	$(document).on('change', '.tr_item', function() {
 		var selectedItem = $(this).val(); // get the value of the changed .tr_item
 		var relatedItemElement = $(this).closest('tr').find('.tr_uom'); // find the related .tr_uom in the same row
+		var relatedSubheadElement = $(this).closest('tr').find('.tr_subhead');
+		var selectedClass = $(this).closest('tr').find('.tr_item_class').val();
 		
 		// Assuming you want to do an AJAX call similar to what you've shown in your initial code:
 		$.post(
@@ -243,27 +296,28 @@ var room = 1;
 			},
 			'json'
 		);  
+		$.post(
+			"<?php echo $this->url('purorder', array('action' => 'getsubhead')); ?>",
+			{
+				itemId: selectedItem,
+				itemclassId: selectedClass,
+			},
+			function(data) {
+				relatedSubheadElement.html(data.subheadlist);
+				relatedSubheadElement.trigger('chosen:updated');
+			},
+			'json'
+		);
 	});
 
 	$(document).on('change', '.tr_item_class', function() {
 		var selectedClass = $(this).val(); // get the value of the changed .tr_item
 		var relatedItemElement = $(this).closest('tr').find('.tr_item'); // find the related .tr_item in the same row
 		var subheadElement = $(this).closest('tr').find('.tr_subhead');
-		var asst = $(this).closest('tr').find('#asst_container'); // find the related .tr_uom in the same row
-		var items = $(this).closest('tr').find('#item_container'); // find the related .tr_uom in the same row
-		$.post(
-			"<?php echo $this->url('purorder', array('action' => 'getsubhead')); ?>",
-			{
-				itemclassId: selectedClass,
-			},
-			function(data) {
-				console.log(data);
-				subheadElement.html(data.subheadlist); // updating the related .tr_uom
-				subheadElement.trigger('chosen:updated'); // if you're using chosen plugin
-				
-			},
-			'json'
-		);
+		var asst = $(this).closest('tr').find('.asst_container, #asst_container'); // find the related .tr_uom in the same row
+		var items = $(this).closest('tr').find('.item_container, #item_container'); // find the related .tr_uom in the same row
+		subheadElement.html("<option value=''></option>");
+		subheadElement.trigger('chosen:updated');
 		if(selectedClass==33){
 			asst.show();
 			items.hide();
@@ -282,6 +336,21 @@ var room = 1;
 				console.log(data);
 				relatedItemElement.html(data.item); // updating the related .tr_uom
 				relatedItemElement.trigger('chosen:updated'); // if you're using chosen plugin
+				var selectedItem = relatedItemElement.val();
+				if(selectedItem && selectedItem !== '0'){
+					$.post(
+						"<?php echo $this->url('purorder', array('action' => 'getsubhead')); ?>",
+						{
+							itemId: selectedItem,
+							itemclassId: selectedClass,
+						},
+						function(subheadData) {
+							subheadElement.html(subheadData.subheadlist);
+							subheadElement.trigger('chosen:updated');
+						},
+						'json'
+					);
+				}
 				
 			},
 			'json'
@@ -326,6 +395,14 @@ var room = 1;
 		// Update the #total field with the new sum
 		$('#po_amount').val(total.toFixed(2));
 	}	
+	function calculateTotalsForAllRows() {
+		$('#purchase_field tbody tr').each(function() {
+			var rate = parseFloat($(this).find('.tr_rate').val()) || 0;
+			var quantity = parseFloat($(this).find('.tr_quantity').val()) || 0;
+			$(this).find('.tr_amount').val((rate * quantity).toFixed(2));
+		});
+		calculateTotalAmount();
+	}
 	
 	function handleRadioButtonChange(row) {
 	const selectedClass = row.find('.tr_item_class').val();
@@ -365,111 +442,6 @@ $(function() {
 		);	
 	});
 	 calculateTotalsForAllRows();
-	/*** Form Validation of PO ***/
-	const fv = FormValidation.formValidation(document.getElementById('#form'), {
-		fields: {
-			'po_date': {
-				validators: {
-					notEmpty: {
-						message: 'Please select PO date'
-					}
-				}
-			},
-			'supplier': {
-				validators: {
-					notEmpty: {
-						message: 'Please select supplier'
-					}
-				}
-			},
-			'activity': {
-				validators: {
-					notEmpty: {
-						message: 'Please select activity'
-					}
-				}
-			},
-			'location': {
-				validators: {
-					notEmpty: {
-						message: 'Please select location'
-					}
-				}
-			}, 
-			'delivery_location': {
-				validators: {
-					notEmpty: {
-						message: 'Please select delivery location'
-					}
-				}
-			},
-			'invoice_amount': {
-				validators: {
-					notEmpty: {
-						message: 'Please provide po amount'
-					}
-				}
-			},
-			'item[]': {
-				validators: {
-					notEmpty: {
-						message: 'Please select item'
-					}
-				}
-			},
-			'uom[]': {
-				validators: {
-					notEmpty: {
-						message: 'Please select uom'
-					}
-				}
-			},
-			'quantity[]': {
-				validators: {
-					notEmpty: {
-						message: 'Please provide quantity'
-					}
-				}
-			},
-			'rate[]': {
-				validators: {
-					notEmpty: {
-						message: 'Please provide rate'
-					}
-				}
-			},
-			'amount[]':{
-				validators:{
-					notEmpty:{
-						message:'Please provide amount'
-					},
-				},
-			},
-			'po_amount':{
-				validators:{
-					notEmpty:{
-						message:'Please provide Net PO Amount',
-					},
-				},
-			},
-		},
-		plugins: {
-			trigger: new FormValidation.plugins.Trigger(),
-			bootstrap3: new FormValidation.plugins.Bootstrap3(),
-			submitButton: new FormValidation.plugins.SubmitButton(),
-			defaultSubmit: new FormValidation.plugins.DefaultSubmit(),
-		},
-	}).on('core.element.validated', function (e) {
-		if (e.valid) {
-			$('div#'+ e.field.replace('[]','') +'_chosen').removeClass('is-invalid');
-			$('div#'+ e.field.replace('[]','') +'_chosen').addClass('is-valid');
-		} else {
-			$('div#'+ e.field.replace('[]','') +'_chosen').removeClass('is-valid');
-			$('div#'+ e.field.replace('[]','') +'_chosen').addClass('is-invalid');
-		}
-	});
-	$('#po_date').on('changeDate',function(){
-		$('form').formValidation('revalidateField', $(this).attr('id'));
-	});
+	// FormValidation removed for edit rows; dynamic row deletion and reindexing are handled server-side.
 });      
 </script>

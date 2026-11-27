@@ -8,6 +8,7 @@
   foreach($pr as $prs):
 	extract($prs);
 	endforeach;
+  $gross = isset($total) ? $total : '0.00';
 ?>
 <style>
     .input-cell {
@@ -46,11 +47,16 @@
 										<input type="hidden" name="id[]" id="id" value="<?php echo $row['id'];?>">
 										<td class="col-lg-2 ">
 											<div class="form-group">
+												<?php $isAssetRow = !is_numeric($row['item']) || (int)$row['item'] <= 0; ?>
+												<?php if($isAssetRow):?>
+													<input class="form-control" name="item[]" id="item" data-placeholder="Select" value="<?php echo !empty($row['item_name']) ? $row['item_name'] : $row['item'];?>" readonly>
+												<?php else:?>
 												<select class="form-control" name="item[]" id="item" data-placeholder="Select"  readonly>
 													<option value="<?php echo $row['item'];?>">
 													<?php echo $this->itemObj->getColumn($row['item'],'name');?>
 													</option>
 												</select> 
+												<?php endif;?>
 											</div>
 										</td>
 										<td class="col-lg-2 input-cell">
@@ -84,7 +90,7 @@
 							</table>
 						</div>
 						<div class="row">
-							<div class="col-lg-6"></div>
+							<div class="col-lg-9"></div>
 							<div class="col-lg-3">
 								<div class="form-group">
 									<label for="total">Total</label>

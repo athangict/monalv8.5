@@ -8,6 +8,7 @@ use Laminas\Authentication\AuthenticationService;
 use DOMPDFModule\View\Model\PdfModel;
 use Interop\Container\ContainerInterface;
 use Accounts\Model As Accounts;
+use Pswf\Model As Pswf;
 use Administration\Model As Administration;//
 use Acl\Model As Acl;
 use Hr\Model As Hr;
@@ -16,6 +17,17 @@ use Purchase\Model As Purchase;
 use Laminas\EventManager\EventManagerInterface;
 class TransactionController extends AbstractActionController
 {   
+	// The shared workflow table uses transaction IDs from both modules.
+	private const TRANSACTION_FLOW_SCOPE = 9001;
+	private const PROCESS_JOURNAL_TRANSACTION = 418;
+	private const PROCESS_CREDIT_APPLICATION = 422;
+	private const PROCESS_RECEIPT_TRANSACTION = 424;
+	private const PROCESS_CONTRA_TRANSACTION = 425;
+	private const PROCESS_EXPENSE_RELEASE = 427;
+	private const PROCESS_REFERENCE_TRANSACTION = 430;
+	private const PROCESS_IWR_TRANSACTION = 431;
+	private const PROCESS_RECONCILIATION = 433;
+
 	private $_container;    // database table 
 	protected $_table; 		// database table 
     protected $_user; 		// user detail
@@ -200,7 +212,7 @@ class TransactionController extends AbstractActionController
 	protected function isPrivilegedUser()
 	{
 		$roles = $this->getCurrentRoleIds();
-		return in_array(99, $roles, true) || in_array(100, $roles, true);
+		return in_array(17, $roles, true) || in_array(99, $roles, true) || in_array(100, $roles, true);
 	}
 
 	protected function getTransactionRow($transactionId)
@@ -214,6 +226,99 @@ class TransactionController extends AbstractActionController
 
 	protected function canAccessTransaction($transactionId)
 	{
+		return $this->canAccessTransactionForProcess($transactionId, self::PROCESS_JOURNAL_TRANSACTION);
+	}
+
+	protected function getIdentityIdList($field)
+	{
+		$rawValue = '';
+		if (in_array($field, array('admin_location', 'admin_activity'), true)) {
+			$rawValue = (string) $this->getDefinedTable(Administration\UsersTable::class)->getColumn((int) $this->_login_id, $field);
+		}
+
+		if ($rawValue === '') {
+			$identity = $this->identity();
+			if ($identity && isset($identity->{$field})) {
+				$rawValue = (string) $identity->{$field};
+			}
+		}
+
+		$ids = array();
+		foreach (explode(',', $rawValue) as $value) {
+			$value = trim($value);
+			if (ctype_digit($value) && (int) $value > 0) {
+				$ids[] = (int) $value;
+			}
+		}
+		return array_values(array_unique($ids));
+	}
+
+	protected function getApplicableProcessId($transaction, $defaultProcessId = 0)
+	{
+		if ($defaultProcessId > 0) {
+			return (int) $defaultProcessId;
+		}
+		$voucherType = 0;
+		if (isset($transaction['voucher_type']) && is_numeric((string) $transaction['voucher_type'])) {
+			$voucherType = (int) $transaction['voucher_type'];
+		} elseif (isset($transaction['voucher_id']) && is_numeric((string) $transaction['voucher_id'])) {
+			$voucherType = (int) $transaction['voucher_id'];
+		}
+		switch ($voucherType) {
+			case 1:
+				return self::PROCESS_CONTRA_TRANSACTION;
+			case 3:
+				return self::PROCESS_RECEIPT_TRANSACTION;
+			case 4:
+				return self::PROCESS_JOURNAL_TRANSACTION;
+			case 5:
+				return self::PROCESS_IWR_TRANSACTION;
+			case 9:
+				return self::PROCESS_REFERENCE_TRANSACTION;
+			case 11:
+			case 12:
+				return self::PROCESS_EXPENSE_RELEASE;
+			default:
+				return 0;
+		}
+	}
+
+	protected function getRoleProcessRows($processId)
+	{
+		$roles = $this->getCurrentRoleIds();
+		if (empty($roles) || (int) $processId <= 0) {
+			return array();
+		}
+
+		$rows = $this->getDefinedTable(Acl\RoleprocessTable::class)->get(array(
+			'process' => (int) $processId,
+		));
+		$filtered = array();
+		foreach ($rows as $row) {
+			if (isset($row['role']) && in_array((int) $row['role'], $roles, true)) {
+				$filtered[] = $row;
+			}
+		}
+		return $filtered;
+	}
+
+	protected function extractPermittedStatusIds(array $roleProcesses)
+	{
+		$statusIds = array();
+		foreach ($roleProcesses as $roleProcess) {
+			$raw = isset($roleProcess['permission_level']) ? (string) $roleProcess['permission_level'] : '';
+			foreach (explode(',', $raw) as $statusId) {
+				$statusId = trim($statusId);
+				if (ctype_digit($statusId) && (int) $statusId > 0) {
+					$statusIds[] = (int) $statusId;
+				}
+			}
+		}
+		return array_values(array_unique($statusIds));
+	}
+
+	protected function canAccessTransactionForProcess($transactionId, $defaultProcessId)
+	{
 		$transaction = $this->getTransactionRow($transactionId);
 		if ($transaction === null) {
 			return false;
@@ -221,7 +326,199 @@ class TransactionController extends AbstractActionController
 		if ($this->isPrivilegedUser()) {
 			return true;
 		}
+
+		$processId = $this->getApplicableProcessId($transaction, $defaultProcessId);
+		if ($processId <= 0) {
+			return false;
+		}
+
+		$roleProcesses = $this->getRoleProcessRows($processId);
+		if (empty($roleProcesses)) {
+			return false;
+		}
+
+		$locationFlags = array_column($roleProcesses, 'location');
+		$activityFlags = array_column($roleProcesses, 'activity');
+		$creatorFlags = array_column($roleProcesses, 'only_if_creator');
+		$statusFlags = array_column($roleProcesses, 'status');
+
+		$restrictLocation = !in_array('0', array_map('strval', $locationFlags), true);
+		$restrictActivity = !in_array('0', array_map('strval', $activityFlags), true);
+		$restrictCreator = !in_array('0', array_map('strval', $creatorFlags), true);
+		$restrictStatus = !in_array('0', array_map('strval', $statusFlags), true);
+
+		if ($restrictCreator && (!isset($transaction['author']) || (int) $transaction['author'] !== (int) $this->_login_id)) {
+			return false;
+		}
+
+		if ($restrictStatus) {
+			$allowedStatuses = $this->extractPermittedStatusIds($roleProcesses);
+			if (empty($allowedStatuses) || !isset($transaction['status']) || !in_array((int) $transaction['status'], $allowedStatuses, true)) {
+				return false;
+			}
+		}
+
+		if ($restrictLocation || $restrictActivity) {
+			$transactionDetails = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->get(array(
+				'transaction' => (int) $transactionId,
+			));
+			if (empty($transactionDetails)) {
+				return false;
+			}
+
+			$allowedLocations = $this->getIdentityIdList('admin_location');
+			$allowedActivities = $this->getIdentityIdList('admin_activity');
+
+			if ($restrictLocation && empty($allowedLocations)) {
+				return false;
+			}
+			if ($restrictActivity && empty($allowedActivities)) {
+				return false;
+			}
+
+			foreach ($transactionDetails as $detail) {
+				$detailLocationId = 0;
+				if (isset($detail['location_id']) && is_numeric((string) $detail['location_id'])) {
+					$detailLocationId = (int) $detail['location_id'];
+				} elseif (isset($detail['location']) && is_numeric((string) $detail['location'])) {
+					$detailLocationId = (int) $detail['location'];
+				}
+				if ($restrictLocation && !in_array($detailLocationId, $allowedLocations, true)) {
+					return false;
+				}
+
+				$detailActivityId = 0;
+				if (isset($detail['activity_id']) && is_numeric((string) $detail['activity_id'])) {
+					$detailActivityId = (int) $detail['activity_id'];
+				} elseif (isset($detail['activity']) && is_numeric((string) $detail['activity'])) {
+					$detailActivityId = (int) $detail['activity'];
+				}
+				if ($restrictActivity && !in_array($detailActivityId, $allowedActivities, true)) {
+					return false;
+				}
+			}
+		}
+
+		return true;
+	}
+
+	protected function canViewTransaction($transactionId, $defaultProcessId = 0)
+	{
+		if ($this->canAccessTransactionForProcess($transactionId, $defaultProcessId)) {
+			return true;
+		}
+
+		$transaction = $this->getTransactionRow($transactionId);
+		if ($transaction === null) {
+			return false;
+		}
+
 		return isset($transaction['author']) && (int) $transaction['author'] === (int) $this->_login_id;
+	}
+
+	protected function getExpenseNotificationTransactionIds()
+	{
+		$transactionIds = array();
+		foreach ($this->getDefinedTable(Acl\NotifyTable::class)->get(array(
+			'n.user' => (int) $this->_login_id,
+			'f.route' => 'transaction',
+			'f.action' => 'viewcredit',
+		)) as $notification) {
+			$id = (string) $notification['key'];
+			if (ctype_digit($id) && (int) $id > 0) {
+				$transactionIds[(int) $id] = true;
+			}
+		}
+		return $transactionIds;
+	}
+
+	protected function isTransactionFlowInScope($flow)
+	{
+		if ((int) ($flow['process'] ?? 0) === self::TRANSACTION_FLOW_SCOPE) {
+			return true;
+		}
+		if (!empty($flow['process'])) {
+			return false;
+		}
+		return empty($this->getDefinedTable(Pswf\TransactionTable::class)->get((int) $flow['application']));
+	}
+
+	protected function filterVisibleTransactions($transactions, $defaultProcessId = 0)
+	{
+		$visibleTransactions = array();
+		foreach ($transactions as $transaction) {
+			if (!isset($transaction['id'])) {
+				continue;
+			}
+			$processId = $this->getApplicableProcessId($transaction, $defaultProcessId);
+			if ($this->canViewTransaction((int) $transaction['id'], $processId)) {
+				$transaction['can_view'] = true;
+				$visibleTransactions[] = $transaction;
+			}
+		}
+		return $visibleTransactions;
+	}
+
+	protected function canActOnWorkflow($flowId, $applicationId, $defaultProcessId)
+	{
+		if (!$this->canAccessTransactionForProcess((int) $applicationId, (int) $defaultProcessId)) {
+			return false;
+		}
+		$flowRows = $this->getDefinedTable(Administration\FlowTransactionTable::class)->get((int) $flowId);
+		$flow = reset($flowRows);
+		if (!$flow || (int) $flow['application'] !== (int) $applicationId || (int) $flow['action_performed'] !== 0) {
+			return false;
+		}
+		if ($this->isPrivilegedUser()) {
+			return true;
+		}
+		if (!$this->isTransactionFlowInScope($flow)) {
+			return false;
+		}
+		if ((int) $flow['flow'] === 2) {
+			return $this->isExpenseWorkflowRecipient($flow);
+		}
+		if (!empty($flow['role_id'])) {
+			return (int) $flow['role_id'] === (int) $this->_login_id;
+		}
+		return in_array((int) $flow['actor'], $this->getCurrentRoleIds(), true);
+	}
+
+	protected function expenseWorkflowRecipients($applicationId, $roleId)
+	{
+		$transactions = $this->getDefinedTable(Accounts\TransactionTable::class)->get((int) $applicationId);
+		$transaction = reset($transactions);
+		if (!$transaction) {
+			throw new \RuntimeException('Expense requisition was not found.');
+		}
+		$users = $this->getDefinedTable(Administration\UsersTable::class);
+		if ((int) $roleId === 2) {
+			return $users->get(array('id' => $transaction['author'], 'status' => 1));
+		}
+		$where = array('status' => 1);
+		if ((int) $roleId === 3) {
+			$transactionRegion = isset($transaction['region']) && is_numeric((string)$transaction['region']) ? (int)$transaction['region'] : 0;
+			if ($transactionRegion <= 0) {
+				$transactionRegion = (int)$users->getColumn($transaction['author'], 'region');
+			}
+			if ($transactionRegion > 0) {
+				$where['region'] = $transactionRegion;
+			}
+		}
+		return array_values(array_filter($users->get($where), static function ($user) use ($roleId) {
+			$roles = array_map('trim', explode(',', (string) $user['role']));
+			return in_array((string) $roleId, $roles, true);
+		}));
+	}
+
+	protected function isExpenseWorkflowRecipient(array $flow)
+	{
+		foreach ($this->expenseWorkflowRecipients($flow['application'], $flow['actor']) as $user) {
+			if ((int) $user['id'] === (int) $this->_login_id) {
+				return true;
+			}
+		}
+		return false;
 	}
 	
 	/**
@@ -271,12 +568,8 @@ class TransactionController extends AbstractActionController
 		}
 		}
 		$user_id=$this->_login_id;
-		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if($this->_login_role==100||$this->_login_role==99):
-		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
-		else:
-		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,$user_region);
-		endif;
+		$transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
+		$transTable = $this->filterVisibleTransactions($transTable, self::PROCESS_JOURNAL_TRANSACTION);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 			
 		$page = 1;
@@ -325,11 +618,60 @@ class TransactionController extends AbstractActionController
 	 * @TRANSACTION CRUD----------------------------------------------
 	 * @ADD Transaction[JOURNAL-PAYABLE/RECEIVEABLE]
 	 */
+	protected function getEntryLocations()
+	{
+		$assigned = $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id, 'admin_location');
+		$ids = array();
+		foreach (explode(',', (string) $assigned) as $id) {
+			$id = trim($id);
+			if (ctype_digit($id) && (int) $id > 0) {
+				$ids[] = (int) $id;
+			}
+		}
+		if (empty($ids)) {
+			return array();
+		}
+		return $this->getDefinedTable(Administration\LocationTable::class)->get(array('id' => array_values(array_unique($ids))));
+	}
+
+	protected function areEntryLocationsAllowed($submitted, array $locations)
+	{
+		if (!is_array($submitted) || empty($submitted)) {
+			return false;
+		}
+		$allowedIds = array_map('intval', array_column($locations, 'id'));
+		foreach ($submitted as $id) {
+			if ((!is_string($id) && !is_int($id)) || !ctype_digit((string) $id) || !in_array((int) $id, $allowedIds, true)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	protected function entryViewModel(array $data)
+	{
+		$locations = $this->getEntryLocations();
+		$regionIds = array_unique(array_column($locations, 'region'));
+		$data['entryLocations'] = $locations;
+		$data['locations'] = $locations;
+		$data['regions'] = empty($regionIds) ? array()
+			: $this->getDefinedTable(Administration\RegionTable::class)->get(array('id' => array_values($regionIds)));
+		if (empty($locations)) {
+			$this->flashMessenger()->addMessage('error^ No Admin Locations are assigned to your account. Please contact your administrator.');
+		}
+		return new ViewModel($data);
+	}
+
 	public function addtransactionAction()
 	{
 		$this->init();
+		$entryLocations = $this->getEntryLocations();
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $entryLocations)) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'addtransaction', 'id' => $this->_id));
+			}
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($this->_user->location, 'prefix');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getcolumn($form['voucher_type'],'prefix');
 			$date = date('ym',strtotime($form['voucher_date']));
@@ -485,25 +827,16 @@ class TransactionController extends AbstractActionController
 				return $this->redirect()->toRoute('transaction');
 			}
 		}
-		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		$role=explode(",", (string) ($this->_login_role ?? ''));//Multiple Role
-		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if($this->_login_role ==100|| $this->_login_role==99 || $this->_login_role==8|| $this->_login_role==6|| $role==array(2,17)|| $role==array(2,5,7)|| $role==array(2,12,17)|| $role==array(5,6)):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;
-		$user_admin_location=$this->getDefinedTable(Administration\UsersTable::class)->get($this->_login_id,'admin_location');
 		$today_date   = date('Y-m-d');
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Add Journal transaction',
 			'todaydate' =>$today_date,
-			'userlocation'=>$user_admin_location,
+			'entryLocations' => $entryLocations,
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
 			'items' => $this->getDefinedTable(Accounts\ItemTable::class)->getAll(),
-			'regions' => $regions,
+
 			'currencies' => $this->getDefinedTable(Accounts\CurrencyTable::class)->getAll(),
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
@@ -538,10 +871,6 @@ class TransactionController extends AbstractActionController
 	public function revokevoucherAction()
 	{
 		$this->init();
-		if (!$this->canAccessTransaction((int)$this->_id)) {
-			$this->flashMessenger()->addMessage("error^ You are not allowed to revoke this transaction");
-			return $this->redirect()->toRoute('transaction', array('action' => 'index'));
-		}
 		if (!$this->isPrivilegedUser()) {
 			$this->flashMessenger()->addMessage("error^ Only highest role user can revoke voucher");
 			return $this->redirect()->toRoute('transaction', array('action' => 'index'));
@@ -551,6 +880,11 @@ class TransactionController extends AbstractActionController
 		if (empty($transaction)) {
 			$this->flashMessenger()->addMessage("notice^ Transaction not found");
 			return $this->redirect()->toRoute('transaction', array('action' => 'index'));
+		}
+		$transactionRow = reset($transaction);
+		$activityProcessId = $this->getApplicableProcessId($transactionRow, 0);
+		if ($activityProcessId <= 0) {
+			$activityProcessId = self::PROCESS_JOURNAL_TRANSACTION;
 		}
 
 		$revokedStatus = $this->getRevokedStatusId();
@@ -579,6 +913,11 @@ class TransactionController extends AbstractActionController
 				endforeach;
 
 				if($result > 0 && $detailResult):
+					if (!$this->logVoucherActivity($activityProcessId, $this->_id, 'Voucher revoked')) {
+						$this->_connection->rollback();
+						$this->flashMessenger()->addMessage("error^ Voucher revoke failed to record in activity log.");
+						return $this->redirect()->toRoute('transaction', array('action' => 'viewdetails', 'id' => $this->_id));
+					}
 					$this->_connection->commit();
 					$this->flashMessenger()->addMessage("success^ Voucher revoked successfully");
 				else:
@@ -589,7 +928,7 @@ class TransactionController extends AbstractActionController
 				$this->_connection->rollback();
 				$this->flashMessenger()->addMessage("notice^ Failed to revoke voucher");
 			}
-			return $this->redirect()->toRoute('transaction', array('action' => 'index'));
+			return $this->redirect()->toRoute('transaction', array('action' => 'viewdetails', 'id' => $this->_id));
 		endif;
 
 		$ViewModel = new ViewModel(array(
@@ -608,12 +947,16 @@ class TransactionController extends AbstractActionController
 	public function edittransactionAction()
 	{
 		$this->init();
-		if (!$this->canAccessTransaction((int) $this->_id)) {
+		if (!$this->canAccessTransactionForProcess((int) $this->_id, self::PROCESS_JOURNAL_TRANSACTION)) {
 			$this->flashMessenger()->addMessage("error^ You are not allowed to edit this transaction");
 			return $this->redirect()->toRoute('transaction', array('action' => 'index'));
 		}
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'edittransaction', 'id' => $this->_id));
+			}
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getColumn($this->_user->location, 'location_code');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getColumn($form['voucher_type'],'prefix');
 			$date = date('ym',strtotime($form['voucher_date']));
@@ -725,21 +1068,16 @@ class TransactionController extends AbstractActionController
 		}
 		$role=explode(",", (string) ($this->_login_role ?? ''));//Multiple Role
 		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if($this->_login_role ==100|| $this->_login_role==99 || $role==array(2,17)|| $role==8):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;
 		
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Update transaction',
 			'login_id'  =>$this->_login_id,
 			'transactions' => $this->getDefinedTable(Accounts\TransactionTable::class)->get($this->_id),
 			'tdetails' => $this->getDefinedTable(Accounts\TransactiondetailTable::class)->get(array('transaction'=>$this->_id)),
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
-			'locations' => $this->getDefinedTable(Administration\LocationTable::class)->getAll(),
-			'regions' => $regions,
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
+
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
@@ -753,6 +1091,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewtransactionAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id, self::PROCESS_JOURNAL_TRANSACTION)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		if($this->_login_role==100):
 		    $edit_option = 1;
 		else:
@@ -774,6 +1116,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewdetailsAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id, self::PROCESS_JOURNAL_TRANSACTION)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		if($this->_login_role==99 || $this->_login_role==100):
 		    $edit_option = 1;
 		else:
@@ -879,7 +1225,8 @@ class TransactionController extends AbstractActionController
 		else:
 		   $user_region='-1';
 		endif;
-		$transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWiseStatus('voucher_date',$year,$month,$date,$status,$user_region);
+		$transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWiseStatus('voucher_date',$year,$month,$date,$status,'-1');
+		$transTable = $this->filterVisibleTransactions($transTable, self::PROCESS_CREDIT_APPLICATION);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 		//echo '<pre>';print_r($transTable);exit;	
 		$page = 1;
@@ -913,6 +1260,10 @@ class TransactionController extends AbstractActionController
 		
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'addcredit', 'id' => $this->_id));
+			}
 			//generate voucher no
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($this->_user->location, 'prefix');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getcolumn($form['voucher_type'],'prefix');
@@ -1079,22 +1430,17 @@ class TransactionController extends AbstractActionController
 		}
 		$role=explode(",", (string) ($this->_login_role ?? ''));//Multiple Role
 		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if($this->_login_role ==100|| $this->_login_role==99 || $role==array(2,17)|| $role==array(2,4,17)):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;
-		$user_admin_location=$this->getDefinedTable(Administration\UsersTable::class)->get($this->_login_id,'admin_location');
+
 		$today_date   = date('Y-m-d');
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Add Expense Requisition',
 			'vdate'=>$today_date,
-			'userlocation' =>$user_admin_location,
+
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
-			'regions' => $regions,
+
 			'items' => $this->getDefinedTable(Accounts\ItemTable::class)->getAll(),
 			'currencies' => $this->getDefinedTable(Accounts\CurrencyTable::class)->getAll(),
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getHeads(),
@@ -1107,12 +1453,20 @@ class TransactionController extends AbstractActionController
 	public function editcreditAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransactionForProcess((int) $this->_id, self::PROCESS_CREDIT_APPLICATION)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		$status = $this->getDefinedTable(Accounts\TransactionTable::class)->getColumn($this->_id,'status');
 		if($status > 3):
 			$this->redirect()->toRoute('transaction');
 		endif;
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'editcredit', 'id' => $this->_id));
+			}
 			//generate voucher no
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getColumn($this->_user->location, 'location_code');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getColumn($form['voucher_type'],'prefix');
@@ -1225,20 +1579,15 @@ class TransactionController extends AbstractActionController
 			}
 		}
 		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if($this->_login_role ==100|| $this->_login_role==99 ||  $this->_login_role==5|| $role==array(2,17)):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Update Expense Requisition',
 			'login_id'     =>$this->_login_id,
 			'transactions' => $this->getDefinedTable(Accounts\TransactionTable::class)->get($this->_id),
 			'tdetails' => $this->getDefinedTable(Accounts\TransactiondetailTable::class)->get(array('transaction'=>$this->_id)),
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
-			'locations' => $this->getDefinedTable(Administration\LocationTable::class)->getAll(),
-			'regions' => $regions,
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
+
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
@@ -1250,17 +1599,44 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewcreditAction(){
 		$this->init();
-		$application_id = $this->_id;
-		/**--Disapearing the notification--*/
 		$params = explode("-", (string) ($this->_id ?? ''));
+		$this->_id = (int) $params[0];
+		if (!$this->canViewTransaction((int) $this->_id, self::PROCESS_CREDIT_APPLICATION)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
+		$application_id = $this->_id;
+		// Keep the notification in the inbox and mark only the recipient's matching voucher as viewed.
 		if (isset($params['1']) && $params['1'] == '1' && isset($params['2']) && $params['2'] > 0) {
-			$flag = $this->getDefinedTable(Acl\NotifyTable::class)->getColumn($params['2'], 'flag'); 
-				if($flag == "0") {
-					$notify = array('id' => $params['2'], 'flag'=>'1','priority'=>'0');//priority red dot(==0....remove)
-					$this->getDefinedTable(Acl\NotifyTable::class)->save($notify); 	
-				}				
+			$notifications = $this->getDefinedTable(Acl\NotifyTable::class)->get(array(
+				'n.id' => (int) $params[2], 'n.user' => (int) $this->_login_id,
+				'f.key' => $application_id, 'f.route' => 'transaction', 'f.action' => 'viewcredit',
+			));
+			foreach ($notifications as $notification) {
+				if ((int) $notification['flag'] === 0) {
+					$result = $this->getDefinedTable(Acl\NotifyTable::class)->save(array(
+						'id' => $notification['id'], 'flag' => '1',
+					));
+					if (!$result) {
+						$this->flashMessenger()->addMessage('error^ Failed to mark the notification as viewed.');
+					}
+				}
+			}
 		}
 		/*end--*/
+		$expenseFlows = array();
+		$allowedExpenseFlowIds = array();
+		foreach ($this->getDefinedTable(Administration\FlowTransactionTable::class)->get(array(
+			'application' => $application_id, 'flow' => 2, 'action_performed' => 0,
+		)) as $flow) {
+			if (!$this->isPrivilegedUser() && !$this->isTransactionFlowInScope($flow)) {
+				continue;
+			}
+			$expenseFlows[] = $flow;
+			if ($this->isPrivilegedUser() || $this->canActOnWorkflow($flow['id'], $application_id, self::PROCESS_CREDIT_APPLICATION)) {
+				$allowedExpenseFlowIds[] = (int) $flow['id'];
+			}
+		}
 		return new ViewModel(array(
 		    'login_id'     =>$this->_login_id,
 		    'role'          =>$this->_login_role,
@@ -1273,6 +1649,8 @@ class TransactionController extends AbstractActionController
 			'flowactionObj'       => $this->getDefinedTable(Administration\FlowActionTable::class),   
 			'login_role'          => $this->_login_role,
 			'application'        => $this->getDefinedTable(Accounts\TransactionTable::class)->get($application_id),
+			'expenseFlows' => $expenseFlows,
+			'allowedExpenseFlowIds' => $allowedExpenseFlowIds,
 			'claimObj'        => $this->getDefinedTable(Hr\TAClaimTable::class),
 			'claimdetails'        => $this->getDefinedTable(Hr\TAClaimDetailsTable::class),
 			'taObj'        => $this->getDefinedTable(Hr\TATable::class),
@@ -1331,7 +1709,8 @@ class TransactionController extends AbstractActionController
 		else:
 		   $user_region='-1';
 		endif;
-		$transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,$user_region);
+		$transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,'-1');
+		$transTable = $this->filterVisibleTransactions($transTable, self::PROCESS_EXPENSE_RELEASE);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 		//echo '<pre>';print_r($transTable);exit;	
 		$page = 1;
@@ -1365,9 +1744,17 @@ class TransactionController extends AbstractActionController
 		//echo '<pre>';print_r($loc);exit;
 		foreach($loc as $loc_id);
 		$location_id=$loc_id['location_id'];
+		if (!$this->areEntryLocationsAllowed(array($location_id), $this->getEntryLocations())) {
+			$this->flashMessenger()->addMessage('error^ The source voucher location is not assigned in your Admin Location access.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		//echo '<pre>';print_r($location_id);exit;
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'addexpense', 'id' => $this->_id));
+			}
 			//generate voucher no
 			$location=$form['location'][0];
 			//echo '<pre>';print_r($location);exit;
@@ -1477,7 +1864,7 @@ class TransactionController extends AbstractActionController
 		}
 		$today_date   = date('Y-m-d');
 		//$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Add Payment',
 			'voucher'   =>$getvouceher,
 			'todaydate'=>$today_date,
@@ -1485,8 +1872,8 @@ class TransactionController extends AbstractActionController
 			'transactiondetails'=>$loc,
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
 			//'locations' => $this->getDefinedTable(Administration\LocationTable::class)->getAll(),
-			'regions' => $this->getDefinedTable(Administration\RegionTable::class)->getAll(),
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
@@ -1500,12 +1887,20 @@ class TransactionController extends AbstractActionController
 	public function editexpenseAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransactionForProcess((int) $this->_id, self::PROCESS_EXPENSE_RELEASE)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		$status = $this->getDefinedTable(Accounts\TransactionTable::class)->getColumn($this->_id,'status');
 		if($status >= 3):
 			$this->redirect()->toRoute('transaction');
 		endif;
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'editexpense', 'id' => $this->_id));
+			}
 			//generate voucher no
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getColumn($this->_user->location, 'location_code');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getColumn($form['voucher_type'],'prefix');
@@ -1612,15 +2007,15 @@ class TransactionController extends AbstractActionController
 				return $this->redirect()->toRoute('transaction', array('action' =>'viewexpense', 'id' => $this->_id));
 			}
 		}
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Update Expense',
 			'login_id'     =>$this->_login_id,
 			'transactions' => $this->getDefinedTable(Accounts\TransactionTable::class)->get($this->_id),
 			'tdetails' => $this->getDefinedTable(Accounts\TransactiondetailTable::class)->get(array('transaction'=>$this->_id)),
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
-			'locations' => $this->getDefinedTable(Administration\LocationTable::class)->getAll(),
-			'regions' => $this->getDefinedTable(Administration\RegionTable::class)->getAll(),
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
+
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
@@ -1633,6 +2028,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewexpenseAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id, self::PROCESS_EXPENSE_RELEASE)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		$application_id = $this->_id;
 		return new ViewModel(array(
 		    'login_id'     =>$this->_login_id,
@@ -1664,6 +2063,10 @@ class TransactionController extends AbstractActionController
 			$application_id = $form['application'];
 			$remark = $form['remarks'];
 			$application_focal=$form['focal'];
+			if (!$this->canActOnWorkflow($flow_id, $application_id, self::PROCESS_EXPENSE_RELEASE)) {
+				$this->flashMessenger()->addMessage('error^ You do not have permission to perform this workflow action.');
+				return $this->redirect()->toRoute('transaction');
+			}
 			$current_flow = $this->getDefinedTable(Administration\FlowTransactionTable::class)->get($flow_id);
 			foreach($current_flow as $flow);
 			$next_activity_no = $flow['activity'] + 1;
@@ -1676,6 +2079,7 @@ class TransactionController extends AbstractActionController
 				'status' 	=> $privilege['status_changed_to'],			
 				'modified'  => $this->_modified
 			);
+			$this->_connection->beginTransaction();
 			foreach($transactiondetailsid as $id):
 			$app_data_details = array(
 				'id'          => $id['id'],				
@@ -1685,7 +2089,6 @@ class TransactionController extends AbstractActionController
 			$app_results = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->save($app_data_details);
 			endforeach;
 			$app_data = $this->_safedataObj->rteSafe($app_data);
-			$this->_connection->beginTransaction();
 			$app_result = $this->getDefinedTable(Accounts\TransactionTable::class)->save($app_data);
 			if($activity_result):
 				$activity_data = array(
@@ -1703,6 +2106,7 @@ class TransactionController extends AbstractActionController
 				if($activity_result):
 					if($privilege['route_to_role']):
 						$flow_data = array(
+							'process'       => self::TRANSACTION_FLOW_SCOPE,
 							'flow'          => $flow['flow'],
 							'role_id'       =>$application_focal,
 							'application'   => $application_id,
@@ -1719,7 +2123,7 @@ class TransactionController extends AbstractActionController
 						);
 						$flow_result = $this->getDefinedTable(Administration\FlowTransactionTable::class)->save($flow_data);
 						if($flow_result):
-							$this->notify($application_id,$privilege['id'],$remark,$flow_result);
+							$this->notify($application_id,$privilege['id'],$flow_result,$remark);
 							$this->getDefinedTable(Administration\FlowTransactionTable::class)->performed($flow_id);
 							$this->_connection->commit();
 							$this->flashMessenger()->addMessage("success^ Successfully applied <strong>".$action_performed."</strong>!");
@@ -1810,6 +2214,7 @@ class TransactionController extends AbstractActionController
 		if($flow_id):
 			foreach($privileges as $privilege);
 			$data = array(
+				'process'          => self::TRANSACTION_FLOW_SCOPE,
 				'flow'             => $flow_id,
 				'application'      => $application_id,
 				'activity'         => 1,
@@ -1845,13 +2250,33 @@ class TransactionController extends AbstractActionController
 			$action_id = $form['action'];
 			$application_id = $form['application'];
 			$remark = $form['remarks'];
-			$application_focal=$this->_author;
+			if (!$this->canActOnWorkflow($flow_id, $application_id, self::PROCESS_CREDIT_APPLICATION)) {
+				$this->flashMessenger()->addMessage('error^ You do not have permission to perform this workflow action.');
+				return $this->redirect()->toRoute('transaction');
+			}
+			$application_focal = null;
 			$current_flow = $this->getDefinedTable(Administration\FlowTransactionTable::class)->get($flow_id);
 			foreach($current_flow as $flow);
 			$next_activity_no = $flow['activity'] + 1;
 			$action_performed = $this->getDefinedTable(Administration\FlowActionTable::class)->getColumn($action_id, 'action');
 			$privileges = $this->getDefinedTable(Administration\FlowPrivilegeTable::class)->get(array('flow'=>$flow['flow'],'action_performed'=>$action_id));
 			foreach($privileges as $privilege);
+			if (!isset($privilege) || !in_array((string) $action_id, explode('|', (string) $flow['action']), true)) {
+				$this->flashMessenger()->addMessage('error^ This workflow action is no longer available.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'viewcredit', 'id' => $application_id));
+			}
+			$nextRouteRole = (int) $privilege['route_to_role'];
+			if ($nextRouteRole > 0) {
+				$nextRecipients = $this->expenseWorkflowRecipients($application_id, $nextRouteRole);
+				if (empty($nextRecipients)) {
+					$application = $this->getTransactionRow((int) $application_id);
+					$regionId = isset($application['region']) ? (int) $application['region'] : 0;
+					$roleName = (string) $this->getDefinedTable(Acl\RolesTable::class)->getColumn($nextRouteRole, 'role');
+					$roleLabel = $roleName !== '' ? $roleName : ('ID '.$nextRouteRole);
+					$this->flashMessenger()->addMessage('error^ No active reviewer is configured for the next workflow role ['.$roleLabel.'] and region ['.$regionId.'].');
+					return $this->redirect()->toRoute('transaction', array('action' => 'viewcredit', 'id' => $application_id));
+				}
+			}
 			$transactiondetailsid=$this->getDefinedTable(Accounts\TransactiondetailTable::class)->get(array('transaction'=>$application_id));
 			$app_data = array(
 				'id'		=> $application_id,				
@@ -1913,6 +2338,7 @@ class TransactionController extends AbstractActionController
 				if($activity_result):
 					if($privilege['route_to_role']):
 						$flow_data = array(
+							'process'       => self::TRANSACTION_FLOW_SCOPE,
 							'flow'          => $flow['flow'],
 							'role_id'       =>$application_focal,
 							'application'   => $application_id,
@@ -1930,7 +2356,7 @@ class TransactionController extends AbstractActionController
 						//echo '<>pre';print_r($flow_data);exit;
 						$flow_result = $this->getDefinedTable(Administration\FlowTransactionTable::class)->save($flow_data);
 						if($flow_result):
-							$this->notify($application_id,$privilege['id'],$remark,$flow_data['role_id']);
+							$this->notify($application_id,$privilege['id'],$flow_result,$remark);
 							$this->getDefinedTable(Administration\FlowTransactionTable::class)->performed($flow_id);
 							$this->_connection->commit();
 							$this->flashMessenger()->addMessage("success^ Successfully applied <strong>".$action_performed."</strong>!");
@@ -1980,7 +2406,7 @@ class TransactionController extends AbstractActionController
 	 */
 	public function notify($application_id,$privilege_id,$role_id,$remarks = NULL)
 	{
-		$userlists='';
+		$userlists=array();
 		$applications = $this->getDefinedTable(Accounts\TransactionTable::class)->get($application_id);
 		foreach($applications as $app);
 		$privileges = $this->getDefinedTable(Administration\FlowPrivilegeTable::class)->get($privilege_id);
@@ -1997,7 +2423,21 @@ class TransactionController extends AbstractActionController
 			);
 			//echo '<>pre';print_r($privileges);exit;
 			$notificationResult = $this->getDefinedTable(Acl\NotificationTable::class)->save($notification_data);
+			if (!$notificationResult) {
+				throw new \RuntimeException('Failed to create the workflow notification.');
+			}
 			if($notificationResult > 0 ){
+				if ((int) $flow['flow'] === 2) {
+					$userlists = array();
+					foreach (explode('|', (string) $flow['route_notification_to']) as $recipientRole) {
+						if (!ctype_digit(trim($recipientRole))) {
+							continue;
+						}
+						foreach ($this->expenseWorkflowRecipients($application_id, (int) $recipientRole) as $user) {
+							$userlists[(int) $user['id']] = $user;
+						}
+					}
+				} else {
 				$notification_array = explode("|", $flow['route_notification_to']);
 				//echo '<pre>';print_r($notification_array);
 				if(sizeof($notification_array)>0){
@@ -2008,21 +2448,19 @@ class TransactionController extends AbstractActionController
 						if($notification_array[$k]=='2'){
 							//Role 2- User Level
 							$userlists = $this->getDefinedTable(Administration\UsersTable::class)->get(array('id'=>$focal_id,'status'=>'1'));
-							echo 'Condition1';
 						}
 						elseif($notification_array[$k]=='3'){
 							//Role 3- Regional Level
 							$region=$this->getDefinedTable(Administration\UsersTable::class)->getColumn($focal_id,'region');
 							$userlists = $this->getDefinedTable(Administration\UsersTable::class)->get(array('role'=>$notification_array[$k],'region'=>$region,'status'=>'1'));
-							echo 'Condition2';
 						}
 						else{
 							//Role 3- Financial Division level
 							$userlists = $this->getDefinedTable(Administration\UsersTable::class)->get(array('role'=>$notification_array[$k],'status'=>'1'));
-							echo 'Condition3';
 						}
 						endforeach;
 					}
+				}
 				}
 				//echo '<pre>';print_r($userlists);exit;
 				$email_array = []; 
@@ -2039,6 +2477,9 @@ class TransactionController extends AbstractActionController
 					);
 					if($flow['notification'] == 1){
 						$notifyResult = $this->getDefinedTable(Acl\NotifyTable::class)->save($notify_data);
+						if (!$notifyResult) {
+							throw new \RuntimeException('Failed to notify a workflow recipient.');
+						}
 					}
 					if($loop_count == 1){
 						$recipient_email = $userlist['email'];
@@ -2104,8 +2545,9 @@ class TransactionController extends AbstractActionController
 		if($this->_login_role==100||$this->_login_role==99):
 		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
 		else:
-		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,$user_region);
+		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,'-1');
 		endif;
+		$transTable = $this->filterVisibleTransactions($transTable, self::PROCESS_RECEIPT_TRANSACTION);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 			
 		$page = 1;
@@ -2136,6 +2578,10 @@ class TransactionController extends AbstractActionController
 		$this->init();
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'adddebit', 'id' => $this->_id));
+			}
 			//generate voucher no
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($this->_user->location, 'prefix');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getcolumn($form['voucher_type'],'prefix');
@@ -2242,22 +2688,17 @@ class TransactionController extends AbstractActionController
 		//$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
 		$role=explode(",", (string) ($this->_login_role ?? ''));//Multiple Role
 		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if($this->_login_role ==100|| $this->_login_role==99 || $this->_login_role==8|| $this->_login_role==6|| $role==array(2,17)|| $role==array(5,6)):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;
-		$user_admin_location=$this->getDefinedTable(Administration\UsersTable::class)->get($this->_login_id,'admin_location');
+
 		$today_date   = date('Y-m-d');
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Add Debit',
-			'userlocation'=>$user_admin_location,
+
 			'todaydate' =>$today_date,
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
 			//'locations' => $this->getDefinedTable(Administration\LocationTable::class)->getAll(),
-			'regions' => $regions,
+
 			'currencies' => $this->getDefinedTable(Accounts\CurrencyTable::class)->getAll(),
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
@@ -2269,8 +2710,16 @@ class TransactionController extends AbstractActionController
 	public function editdebitAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransactionForProcess((int) $this->_id, self::PROCESS_RECEIPT_TRANSACTION)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'editdebit', 'id' => $this->_id));
+			}
 			//generate voucher no
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getColumn($this->_user->location, 'location_code');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getColumn($form['voucher_type'],'prefix');
@@ -2386,21 +2835,16 @@ class TransactionController extends AbstractActionController
 			}
 		}
 		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if($this->_login_role ==100|| $this->_login_role==99):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;
 		//echo '';print_r('hello');exit;
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Update Receipt',
 			'login_id'  =>$this->_login_id,
 			'transactions' => $this->getDefinedTable(Accounts\TransactionTable::class)->get($this->_id),
 			'tdetails' => $this->getDefinedTable(Accounts\TransactiondetailTable::class)->get(array('transaction'=>$this->_id)),
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
-			'locations' => $this->getDefinedTable(Administration\LocationTable::class)->getAll(),
-			'regions' => $regions,
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
+
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
@@ -2413,6 +2857,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewdebitAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id, self::PROCESS_RECEIPT_TRANSACTION)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		if($this->_login_role==100):
 		    $edit_option = 1;
 		else:
@@ -2513,8 +2961,9 @@ class TransactionController extends AbstractActionController
 		if($this->_login_role==100||$this->_login_role==99):
 		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
 		else:
-		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,$user_region);
+		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,'-1');
 		endif;
+		$transTable = $this->filterVisibleTransactions($transTable, self::PROCESS_CONTRA_TRANSACTION);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 			
 		$page = 1;
@@ -2539,46 +2988,6 @@ class TransactionController extends AbstractActionController
 		));
 	}
 	/**
-	 * Delete  Action
-	 */
-	public function deletecontraAction()
-	{
-		$this->init();
-		if (!$this->canAccessTransaction((int) $this->_id)) {
-			$this->flashMessenger()->addMessage("error^ You are not allowed to delete this transaction");
-			return $this->redirect()->toRoute('transaction', array('action' => 'contra'));
-		}
-		if($this->getRequest()->isPost()){
-			$form = $this->getRequest()->getPost();
-			$voucher = $this->getDefinedTable(Accounts\TransactionTable::class)->getColumn($this->_id,'voucher_type');
-			$transactiondetails_id = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->get(array('td.transaction'=>$this->_id));
-			$result = false;
-			$result2 = 0;
-			foreach($transactiondetails_id as $transactiondetails_ids):
-				$result = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->remove($transactiondetails_ids['id']);
-			endforeach;
-			if($result):
-			$result2 = $this->getDefinedTable(Accounts\TransactionTable::class)->remove($this->_id);
-			endif;
-			if($result2 > 0):
-				$this->flashMessenger()->addMessage("success^ successfully deleted  data");
-			else:
-				$this->flashMessenger()->addMessage("notice^ Failed to delete  data");
-			endif;
-			if($voucher==1):
-				return $this->redirect()->toRoute('transaction', array('action'=>'contra'));
-			else:
-				return $this->redirect()->toRoute('transaction', array('action'=>'debit'));
-			endif;
-		}
-		$ViewModel = new ViewModel(array(
-			'title' => 'Delete Contra',
-			'trans'    =>$this->getDefinedTable(Accounts\TransactionTable::class)->get($this->_id),
-		));
-			$ViewModel->setTerminal(True);
-		return $ViewModel;
-	}
-	/**
 	 *  add transaction action
 	 */
 	public function addcontraAction()
@@ -2586,6 +2995,10 @@ class TransactionController extends AbstractActionController
 		$this->init();
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'addcontra', 'id' => $this->_id));
+			}
 			//generate voucher no
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($this->_user->location, 'prefix');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getcolumn($form['voucher_type'],'prefix');
@@ -2713,22 +3126,17 @@ class TransactionController extends AbstractActionController
 		}
 		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
 		$role=explode(",", (string) ($this->_login_role ?? ''));//Multiple Role
-		if($this->_login_role ==100|| $this->_login_role==99 ||$this->_login_role==6 ||$this->_login_role==8||$role==array(5,6)):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;
-		$user_admin_location=$this->getDefinedTable(Administration\UsersTable::class)->get($this->_login_id,'admin_location');
+
 		$today_date   = date('Y-m-d');
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Add Contra Transaction',
 			'todaydate' =>$today_date,
-			'userlocation'=>$user_admin_location,
+
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
-			'regions' => $regions,
+
 			'items' => $this->getDefinedTable(Accounts\ItemTable::class)->getAll(),
 			'currencies' => $this->getDefinedTable(Accounts\CurrencyTable::class)->getAll(),
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
@@ -2740,8 +3148,16 @@ class TransactionController extends AbstractActionController
 	public function editcontraAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransactionForProcess((int) $this->_id, self::PROCESS_CONTRA_TRANSACTION)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'editcontra', 'id' => $this->_id));
+			}
 			//generate voucher no
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getColumn($this->_user->location, 'location_code');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getColumn($form['voucher_type'],'prefix');
@@ -2855,20 +3271,15 @@ class TransactionController extends AbstractActionController
 			}
 		}
 		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if($this->_login_role ==100|| $this->_login_role==99):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Update Contra Transaction',
 			'login_id'  =>$this->_login_id,
 			'transactions' => $this->getDefinedTable(Accounts\TransactionTable::class)->get($this->_id),
 			'tdetails' => $this->getDefinedTable(Accounts\TransactiondetailTable::class)->get(array('transaction'=>$this->_id)),
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
-			'locations' => $this->getDefinedTable(Administration\LocationTable::class)->getAll(),
-			'regions' => $regions,
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
+
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
@@ -2881,6 +3292,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewcontraAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id, self::PROCESS_CONTRA_TRANSACTION)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		if($this->_login_role==100):
 		    $edit_option = 1;
 		else:
@@ -2935,6 +3350,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function receiptprintAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id, self::PROCESS_RECEIPT_TRANSACTION)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		return new ViewModel(array(
 			'transactionrow' => $this->getDefinedTable(Accounts\TransactionTable::class)->get($this->_id),
 			'transactiondetails' => $this->getDefinedTable(Accounts\TransactiondetailTable::class)->get(array('transaction' => $this->_id)),
@@ -3019,12 +3438,8 @@ class TransactionController extends AbstractActionController
 		}
 		}
 		$user_id=$this->_login_id;
-		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if($this->_login_role==100||$this->_login_role==99):
-		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
-		else:
-		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,$user_region);
-		endif;
+		$transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
+		$transTable = $this->filterVisibleTransactions($transTable, self::PROCESS_REFERENCE_TRANSACTION);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 			
 		$page = 1;
@@ -3062,6 +3477,10 @@ class TransactionController extends AbstractActionController
 		
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'addagainstcredit', 'id' => $this->_id));
+			}
 			//generate voucher no
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($this->_user->location, 'prefix');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getcolumn($form['voucher_type'],'prefix');
@@ -3195,24 +3614,19 @@ class TransactionController extends AbstractActionController
 	    /* role=8-Western Union User
            role=6-casher*/	
 		   
-		$role=explode(",", (string) ($this->_login_role ?? ''));//Multiple Role
-		if($this->_login_role ==100|| $this->_login_role==99 || $this->_login_role==5|| $this->_login_role==8 || $this->_login_role==6 || $role==array(2,17)):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;//exit;
+		$role=explode(",", (string) ($this->_login_role ?? ''));//Multiple Role//exit;
 		//echo '<pre>';print_r($voucher);exit;
-		$user_admin_location=$this->getDefinedTable(Administration\UsersTable::class)->get($this->_login_id,'admin_location');
+
 		$today_date   = date('Y-m-d');
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Add Against',
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
 			//'locations' => $this->getDefinedTable(Administration\LocationTable::class)->getAll(),
-			'regions' => $regions,
+
 			'todaydate' =>$today_date,
-			'userlocation' => $user_admin_location,
+
 			'voucher'   =>$getvouceher,
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
@@ -3226,12 +3640,20 @@ class TransactionController extends AbstractActionController
 	public function editagainstAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransactionForProcess((int) $this->_id, self::PROCESS_REFERENCE_TRANSACTION)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('transaction', array('action' => 'against'));
+		}
 		$status = $this->getDefinedTable(Accounts\TransactionTable::class)->getColumn($this->_id,'status');
 		if($status >= 3):
 			$this->redirect()->toRoute('transaction');
 		endif;
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'editagainst', 'id' => $this->_id));
+			}
 			//generate voucher no
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getColumn($this->_user->location, 'location_code');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getColumn($form['voucher_type'],'prefix');
@@ -3344,20 +3766,15 @@ class TransactionController extends AbstractActionController
 			}
 		}
 		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if($this->_login_role ==100|| $this->_login_role==99||$this->_login_role==5):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Update Against Credit',
 			'login_id'   =>$this->_login_id,
 			'transactions' => $this->getDefinedTable(Accounts\TransactionTable::class)->get($this->_id),
 			'tdetails' => $this->getDefinedTable(Accounts\TransactiondetailTable::class)->get(array('transaction'=>$this->_id)),
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
-			'locations' => $this->getDefinedTable(Administration\LocationTable::class)->getAll(),
-			'regions' => $regions,
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
+
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
@@ -3370,6 +3787,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewagainstAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id, self::PROCESS_REFERENCE_TRANSACTION)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('transaction', array('action' => 'against'));
+		}
 		$viewModel = new ViewModel(array(
 		    'login_id'  =>$this->_login_id,
 			'transactionrow' => $this->getDefinedTable(Accounts\TransactionTable::class)->get($this->_id),
@@ -3497,8 +3918,9 @@ class TransactionController extends AbstractActionController
 		if($this->_login_role==100||$this->_login_role==99):
 		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
 		else:
-		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,$user_region);
+		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,'-1');
 		endif;
+		$transTable = $this->filterVisibleTransactions($transTable, self::PROCESS_EXPENSE_RELEASE);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 			
 		$page = 1;
@@ -3531,6 +3953,10 @@ class TransactionController extends AbstractActionController
 		$getvouceher=$this->getDefinedTable(Accounts\TransactionTable::class)->get($application_id);
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'addagainstdebit', 'id' => $this->_id));
+			}
 			//generate voucher no
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($this->_user->location, 'prefix');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getcolumn($form['voucher_type'],'prefix');
@@ -3653,24 +4079,19 @@ class TransactionController extends AbstractActionController
 				return $this->redirect()->toRoute('transaction');
 			}
 		}
-		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if($this->_login_role ==100|| $this->_login_role==99 || $this->_login_role==5 || $this->_login_role==6):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;//exit;
+		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');//exit;
 		//echo '<pre>';print_r($voucher);exit;
-		$user_admin_location=$this->getDefinedTable(Administration\UsersTable::class)->get($this->_login_id,'admin_location');
+
 		$today_date   = date('Y-m-d');
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Add Against Debit',
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
 			//'locations' => $this->getDefinedTable(Administration\LocationTable::class)->getAll(),
-			'regions' => $regions,
+
 			'todaydate' =>$today_date,
-			'userlocation' => $user_admin_location,
+
 			'voucher'   =>$getvouceher,
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
@@ -3682,12 +4103,21 @@ class TransactionController extends AbstractActionController
 	public function editagainstdebitAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransactionForProcess((int) $this->_id, self::PROCESS_EXPENSE_RELEASE)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('transaction', array('action' => 'againstdebit'));
+		}
 		$status = $this->getDefinedTable(Accounts\TransactionTable::class)->getColumn($this->_id,'status');
 		//if($status >= 3):
 			//$this->redirect()->toRoute('transaction');
 		//endif;
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'editagainstdebit', 'id' => $this->_id));
+			}
+			$reference = (isset($form['reference']) && is_array($form['reference'])) ? $form['reference'] : array();
 			//generate voucher no
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getColumn($this->_user->location, 'location_code');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getColumn($form['voucher_type'],'prefix');
@@ -3709,7 +4139,10 @@ class TransactionController extends AbstractActionController
 				'remark' => $form['remark'],
 				//'status' => 2, // status pending 
 				'modified' =>$this->_modified,
-			);			
+			);
+			if($form['doc_id'] != "Payroll"):
+				$data1['against_vid'] = implode(',', $reference);
+			endif;
 			$data1 = $this->_safedataObj->rteSafe($data1);
 			$this->_connection->beginTransaction(); //***Transaction begins here***//
 			$result = $this->getDefinedTable(Accounts\TransactionTable::class)->save($data1);
@@ -3750,6 +4183,7 @@ class TransactionController extends AbstractActionController
 								'activity' => $location[$i],
 								'head' => $head[$i],
 								'sub_head' => $sub_head[$i],
+								'against' => isset($reference[$i]) ? $reference[$i] : 0,
 								'bank_ref_type' => '',
 								'cheque_no' => (!empty($cheque_no)) ? $cheque_no : 'DFT-',
 								'debit' => (isset($debit[$i]))? $debit[$i]:'0.00',
@@ -3766,6 +4200,7 @@ class TransactionController extends AbstractActionController
 								'activity' => $location[$i],
 								'head' => $head[$i],
 								'sub_head' => $sub_head[$i],
+								'against' => isset($reference[$i]) ? $reference[$i] : 0,
 								'bank_ref_type' => '',
 								'cheque_no' => (!empty($cheque_no)) ? $cheque_no : 'DFT-',
 								'debit' => (isset($debit[$i]))? $debit[$i]:'0.00',
@@ -3825,20 +4260,15 @@ class TransactionController extends AbstractActionController
 			}
 		}
 		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if($this->_login_role ==100|| $this->_login_role==99||$this->_login_role==5||$this->_login_role==6):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Update Against',
 			'login_id'   =>$this->_login_id,
 			'transactions' => $this->getDefinedTable(Accounts\TransactionTable::class)->get($this->_id),
 			'tdetails' => $this->getDefinedTable(Accounts\TransactiondetailTable::class)->get(array('transaction'=>$this->_id)),
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
-			'locations' => $this->getDefinedTable(Administration\LocationTable::class)->getAll(),
-			'regions' => $regions,
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
+
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
@@ -3851,6 +4281,10 @@ class TransactionController extends AbstractActionController
 	public function editagainstpayrollAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransactionForProcess((int) $this->_id, self::PROCESS_EXPENSE_RELEASE)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		$status = $this->getDefinedTable(Accounts\TransactionTable::class)->getColumn($this->_id,'status');
 		//if($status >= 3):
 			//$this->redirect()->toRoute('transaction');
@@ -3930,6 +4364,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewagainstdebitAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id, self::PROCESS_EXPENSE_RELEASE)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		$application_id = $this->_id;
 		return new ViewModel(array(
 		    'login_id'     =>$this->_login_id,
@@ -4030,8 +4468,9 @@ class TransactionController extends AbstractActionController
 		if($this->_login_role==100||$this->_login_role==99):
 		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
 		else:
-		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,$user_region);
+		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,'-1');
 		endif;
+		$transTable = $this->filterVisibleTransactions($transTable, self::PROCESS_IWR_TRANSACTION);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 			
 		$page = 1;
@@ -4062,6 +4501,10 @@ class TransactionController extends AbstractActionController
 		$this->init();
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'addiwr', 'id' => $this->_id));
+			}
 			//generate voucher no
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($this->_user->location, 'prefix');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getcolumn($form['voucher_type'],'prefix');
@@ -4167,22 +4610,17 @@ class TransactionController extends AbstractActionController
 		}
 		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
 		//$test= $this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-	    if($this->_login_role ==100|| $this->_login_role==99|| $this->_login_role==8):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;
-		$user_admin_location=$this->getDefinedTable(Administration\UsersTable::class)->get($this->_login_id,'admin_location');
+
 		$today_date   = date('Y-m-d');
 		/*HEAD USED FOR IWR PAYMENT----------------------------------------------------------------*/
 		$head = ['31','69','109','30','32','125','56','57','58','59','220','221','222','223'];
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Add IWR transaction',
 			'todaydate' =>$today_date,
-			'userlocation'=>$user_admin_location,
+
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
-			'regions' => $regions,
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.id'=>$head)),
@@ -4195,8 +4633,16 @@ class TransactionController extends AbstractActionController
 	public function editiwrAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransactionForProcess((int) $this->_id, self::PROCESS_IWR_TRANSACTION)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'editiwr', 'id' => $this->_id));
+			}
 			//generate voucher no
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getColumn($this->_user->location, 'location_code');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getColumn($form['voucher_type'],'prefix');
@@ -4313,20 +4759,15 @@ class TransactionController extends AbstractActionController
 			}
 		}
 		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if($this->_login_role ==100|| $this->_login_role==99):
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->getAll();
-		else:
-		   $regions=$this->getDefinedTable(Administration\RegionTable::class)->get(array('id'=>$user_region));
-		endif;
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Update transaction',
 			'login_id'  =>$this->_login_id,
 			'transactions' => $this->getDefinedTable(Accounts\TransactionTable::class)->get($this->_id),
 			'tdetails' => $this->getDefinedTable(Accounts\TransactiondetailTable::class)->get(array('transaction'=>$this->_id)),
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
-			'locations' => $this->getDefinedTable(Administration\LocationTable::class)->getAll(),
-			'regions' => $regions,
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
+
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
@@ -4338,6 +4779,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewiwrAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id, self::PROCESS_IWR_TRANSACTION)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		if($this->_login_role==100):
 		    $edit_option = 1;
 		else:
@@ -4435,10 +4880,11 @@ class TransactionController extends AbstractActionController
 		if($this->_login_role==100||$this->_login_role==99||$this->_login_role==8):
 		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
 		else:
-		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,$user_region);
+		    $transTable = $this->getDefinedTable(Accounts\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,'-1');
 		endif;
 		//echo '<pre>';print_r($transTable);exit;
 		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
+		$transTable = $this->filterVisibleTransactions($transTable, self::PROCESS_IWR_TRANSACTION);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 			
 		$page = 1;
@@ -4469,6 +4915,10 @@ class TransactionController extends AbstractActionController
 		$this->init();
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'addiwrreceipt', 'id' => $this->_id));
+			}
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($this->_user->location, 'prefix');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getcolumn($form['voucher_type'],'prefix');
 			$date = date('ym',strtotime($form['voucher_date']));
@@ -4723,17 +5173,17 @@ class TransactionController extends AbstractActionController
 				return $this->redirect()->toRoute('transaction');
 			}
 		}
-		$user_admin_location=$this->getDefinedTable(Administration\UsersTable::class)->get($this->_login_id,'admin_location');
+
 		$today_date   = date('Y-m-d');
 		/*HEAD USED FOR IWR PAYMENT----------------------------------------------------------------*/
 		$head = ['31','69','109','30','32','125','56','57','58','59','220','221','222','223'];
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'IWR Receipt',
 			'todaydate' =>$today_date,
-			'userlocation'=>$user_admin_location,
+
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
-			'regions' => $this->getDefinedTable(Administration\RegionTable::class)->getAll(),
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->get(array('h.id'=>$head)),
@@ -4746,12 +5196,20 @@ class TransactionController extends AbstractActionController
 	public function editiwrreceiptAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransactionForProcess((int) $this->_id, self::PROCESS_IWR_TRANSACTION)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		$status = $this->getDefinedTable(Accounts\TransactionTable::class)->getColumn($this->_id,'status');
 		if($status >= 3):
 			$this->redirect()->toRoute('transaction');
 		endif;
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			if (!$this->areEntryLocationsAllowed($form['location'] ?? null, $this->getEntryLocations())) {
+				$this->flashMessenger()->addMessage('error^ Please select only locations assigned in your Admin Location access.');
+				return $this->redirect()->toRoute('transaction', array('action' => 'editiwrreceipt', 'id' => $this->_id));
+			}
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getColumn($this->_user->location, 'location_code');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getColumn($form['voucher_type'],'prefix');
 			$date = date('ym',strtotime($form['voucher_date']));
@@ -4859,15 +5317,15 @@ class TransactionController extends AbstractActionController
 				return $this->redirect()->toRoute('transaction', array('action' =>'viewiwrreceipt', 'id' => $this->_id));
 			}
 		}
-		return new ViewModel(array(
+		return $this->entryViewModel(array(
 			'title'  => 'Update IWR Receipt',
 			'login_id'  =>$this->_login_id,
 			'transactions' => $this->getDefinedTable(Accounts\TransactionTable::class)->get($this->_id),
 			'tdetails' => $this->getDefinedTable(Accounts\TransactiondetailTable::class)->get(array('transaction'=>$this->_id)),
 			'activities' => $this->getDefinedTable(Administration\ActivityTable::class)->getAll(),
-			'locations' => $this->getDefinedTable(Administration\LocationTable::class)->getAll(),
-			'regions' => $this->getDefinedTable(Administration\RegionTable::class)->getAll(),
-			'locationObj' => $this->getDefinedTable(Administration\LocationTable::class),
+
+
+
 			'journals' => $this->getDefinedTable(Accounts\JournalTable::class)->getAll(),
 			'subheadObj' => $this->getDefinedTable(Accounts\SubheadTable::class),
 			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
@@ -4880,6 +5338,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewiwrreceiptAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id, self::PROCESS_IWR_TRANSACTION)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('transaction');
+		}
 		//$commission = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->get(array('transaction' => $this->_id));
 		//foreach(($commission as $ca);
 		//$transaction_id=$ca['transaction'];

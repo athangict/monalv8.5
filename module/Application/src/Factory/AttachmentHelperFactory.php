@@ -30,7 +30,7 @@ class AttachmentHelperFactory implements FactoryInterface
      * @param null|array $options
      * @return Getresourcehelper
      */
-    public function __invoke(ContainerInterface $container, $requestedName, array $options = null)
+    public function __invoke(ContainerInterface $container, $requestedName, ?array $options = null)
     {
         $class = $requestedName ? '\\' .$requestedName : AttachmentHelper::class;
         $attachTable = $container->get(AttachmentTable::class);

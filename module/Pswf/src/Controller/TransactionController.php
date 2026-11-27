@@ -17,6 +17,9 @@ use Pswf\Model As Pswf;
 use Laminas\EventManager\EventManagerInterface;
 class TransactionController extends AbstractActionController
 {   
+	// The shared workflow table uses transaction IDs from both modules.
+	private const TRANSACTION_FLOW_SCOPE = 9002;
+
 	protected $_login_location_type;
 	private $_container;    // database table 
 	protected $_table; 		// database table 
@@ -149,6 +152,79 @@ class TransactionController extends AbstractActionController
 		}
 		return isset($transaction['author']) && (int) $transaction['author'] === (int) $this->_login_id;
 	}
+
+	private function canViewTransaction($transactionId)
+	{
+		if ($this->canAccessTransaction($transactionId)) {
+			return true;
+		}
+		$assignments = $this->getDefinedTable(Administration\FlowTransactionTable::class)->get(array(
+			'application' => (int) $transactionId,
+			'role_id' => (int) $this->_login_id,
+			'action_performed' => 0,
+		));
+		foreach ($assignments as $assignment) {
+			if ($this->isTransactionFlowInScope($assignment)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private function isTransactionFlowInScope($flow)
+	{
+		if ((int) ($flow['process'] ?? 0) === self::TRANSACTION_FLOW_SCOPE) {
+			return true;
+		}
+		if (!empty($flow['process'])) {
+			return false;
+		}
+		return empty($this->getDefinedTable(Accounts\TransactionTable::class)->get((int) $flow['application']));
+	}
+
+	private function filterVisibleTransactions($transactions)
+	{
+		$assignedTransactionIds = array();
+		if (!$this->isPrivilegedUser()) {
+			$assignments = $this->getDefinedTable(Administration\FlowTransactionTable::class)->get(array(
+				'role_id' => (int) $this->_login_id,
+				'action_performed' => 0,
+			));
+			foreach ($assignments as $assignment) {
+				if ($this->isTransactionFlowInScope($assignment)) {
+					$assignedTransactionIds[(int) $assignment['application']] = true;
+				}
+			}
+		}
+
+		$visibleTransactions = array();
+		foreach ($transactions as $transaction) {
+			$isVisible = $this->isPrivilegedUser()
+				|| (isset($transaction['author']) && (int) $transaction['author'] === (int) $this->_login_id)
+				|| isset($assignedTransactionIds[(int) $transaction['id']]);
+			if ($isVisible) {
+				$transaction['can_view'] = true;
+				$visibleTransactions[] = $transaction;
+			}
+		}
+		return $visibleTransactions;
+	}
+
+	private function canActOnWorkflow($flowId, $applicationId)
+	{
+		$flowRows = $this->getDefinedTable(Administration\FlowTransactionTable::class)->get((int) $flowId);
+		$flow = reset($flowRows);
+		if (!$flow || (int) $flow['application'] !== (int) $applicationId || (int) $flow['action_performed'] !== 0 || !$this->isTransactionFlowInScope($flow)) {
+			return false;
+		}
+		if ($this->isPrivilegedUser()) {
+			return true;
+		}
+		if (!empty($flow['role_id'])) {
+			return (int) $flow['role_id'] === (int) $this->_login_id;
+		}
+		return in_array((int) $flow['actor'], $this->getCurrentRoleIds(), true);
+	}
 	
 	/**
 	 *  index action
@@ -197,12 +273,8 @@ class TransactionController extends AbstractActionController
 		}
 		}
 		$user_id=$this->_login_id;
-		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if($this->_login_role==100||$this->_login_role==99):
-		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
-		else:
-		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,$user_region);
-		endif;
+		$transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
+		$transTable = $this->filterVisibleTransactions($transTable);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 			
 		$page = 1;
@@ -219,6 +291,7 @@ class TransactionController extends AbstractActionController
 			'title'         => 'Journal Transaction',
 			'user'          =>$user_id,
 			'role'          =>$user_role,
+			'isPrivileged'  => $this->isPrivilegedUser(),
 			'paginator'     => $paginator,
 			'page'          => $page,
 			'data'          => $data,
@@ -590,6 +663,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewtransactionAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction');
+		}
 		if($this->_login_role==100):
 		    $edit_option = 1;
 		else:
@@ -609,6 +686,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewdetailsAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction');
+		}
 		if($this->_login_role==99 || $this->_login_role==100):
 		    $edit_option = 1;
 		else:
@@ -709,7 +790,8 @@ class TransactionController extends AbstractActionController
 		else:
 		   $user_region='-1';
 		endif;
-		$transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWiseStatus('voucher_date',$year,$month,$date,$status,$user_region);
+		$transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWiseStatus('voucher_date',$year,$month,$date,$status,'-1');
+		$transTable = $this->filterVisibleTransactions($transTable);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 		//echo '<pre>';print_r($transTable);exit;	
 		$page = 1;
@@ -932,6 +1014,10 @@ class TransactionController extends AbstractActionController
 	public function editcreditAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction');
+		}
 		$status = $this->getDefinedTable(Pswf\TransactionTable::class)->getColumn($this->_id,'status');
 		if($status > 3):
 			$this->redirect()->toRoute('transaction');
@@ -1060,6 +1146,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewcreditAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction');
+		}
 		$application_id = $this->_id;
 		/**--Disapearing the notification--*/
 		$params = explode("-", (string) $this->_id);
@@ -1140,7 +1230,8 @@ class TransactionController extends AbstractActionController
 		else:
 		   $user_region='-1';
 		endif;
-		$transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,$user_region);
+		$transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,'-1');
+		$transTable = $this->filterVisibleTransactions($transTable);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 		//echo '<pre>';print_r($transTable);exit;	
 		$page = 1;
@@ -1304,6 +1395,10 @@ class TransactionController extends AbstractActionController
 	public function editexpenseAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction');
+		}
 		$status = $this->getDefinedTable(Pswf\TransactionTable::class)->getColumn($this->_id,'status');
 		if($status >= 3):
 			$this->redirect()->toRoute('transaction');
@@ -1420,6 +1515,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewexpenseAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction');
+		}
 		$application_id = $this->_id;
 		return new ViewModel(array(
 		    'login_id'     =>$this->_login_id,
@@ -1451,6 +1550,10 @@ class TransactionController extends AbstractActionController
 			$application_id = $form['application'];
 			$remark = $form['remarks'];
 			$application_focal=$form['focal'];
+			if (!$this->canActOnWorkflow($flow_id, $application_id)) {
+				$this->flashMessenger()->addMessage('error^ You do not have permission to perform this workflow action.');
+				return $this->redirect()->toRoute('pswf/transaction');
+			}
 			$current_flow = $this->getDefinedTable(Administration\FlowTransactionTable::class)->get($flow_id);
 			foreach($current_flow as $flow);
 			$next_activity_no = $flow['activity'] + 1;
@@ -1490,6 +1593,7 @@ class TransactionController extends AbstractActionController
 				if($app_result):
 					if($privilege['route_to_role']):
 						$flow_data = array(
+							'process'       => self::TRANSACTION_FLOW_SCOPE,
 							'flow'          => $flow['flow'],
 							'role_id'       =>$application_focal,
 							'application'   => $application_id,
@@ -1594,6 +1698,7 @@ class TransactionController extends AbstractActionController
 		if($flow_id):
 			foreach($privileges as $privilege);
 			$data = array(
+				'process'          => self::TRANSACTION_FLOW_SCOPE,
 				'flow'             => $flow_id,
 				'application'      => $application_id,
 				'activity'         => 1,
@@ -1629,6 +1734,10 @@ class TransactionController extends AbstractActionController
 			$action_id = $form['action'];
 			$application_id = $form['application'];
 			$remark = $form['remarks'];
+			if (!$this->canActOnWorkflow($flow_id, $application_id)) {
+				$this->flashMessenger()->addMessage('error^ You do not have permission to perform this workflow action.');
+				return $this->redirect()->toRoute('pswf/transaction');
+			}
 			$application_focal=$this->_author;
 			$current_flow = $this->getDefinedTable(Administration\FlowTransactionTable::class)->get($flow_id);
 			foreach($current_flow as $flow);
@@ -1697,6 +1806,7 @@ class TransactionController extends AbstractActionController
 				if($app_result):
 					if($privilege['route_to_role']):
 						$flow_data = array(
+							'process'       => self::TRANSACTION_FLOW_SCOPE,
 							'flow'          => $flow['flow'],
 							'role_id'       =>$application_focal,
 							'application'   => $application_id,
@@ -1888,8 +1998,9 @@ class TransactionController extends AbstractActionController
 		if($this->_login_role==100||$this->_login_role==99):
 		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
 		else:
-		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,$user_region);
+		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,'-1');
 		endif;
+		$transTable = $this->filterVisibleTransactions($transTable);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 			
 		$page = 1;
@@ -2048,6 +2159,10 @@ class TransactionController extends AbstractActionController
 	public function editdebitAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction');
+		}
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
 			//generate voucher no
@@ -2176,6 +2291,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewdebitAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction');
+		}
 		if($this->_login_role==100):
 		    $edit_option = 1;
 		else:
@@ -2272,8 +2391,9 @@ class TransactionController extends AbstractActionController
 		if($this->_login_role==100||$this->_login_role==99):
 		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
 		else:
-		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,$user_region);
+		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,'-1');
 		endif;
+		$transTable = $this->filterVisibleTransactions($transTable);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 			
 		$page = 1;
@@ -2296,46 +2416,6 @@ class TransactionController extends AbstractActionController
 			'voucherObj'    =>$this->getDefinedTable(Pswf\JournalTable::class),
 			
 		));
-	}
-	/**
-	 * Delete  Action
-	 */
-	public function deletecontraAction()
-	{
-		$this->init();
-		if (!$this->canAccessTransaction((int) $this->_id)) {
-			$this->flashMessenger()->addMessage("error^ You are not allowed to delete this transaction");
-			return $this->redirect()->toRoute('transaction', array('action' => 'contra'));
-		}
-		if($this->getRequest()->isPost()){
-			$form = $this->getRequest()->getPost();
-			$voucher = $this->getDefinedTable(Pswf\TransactionTable::class)->getColumn($this->_id,'voucher_type');
-			$transactiondetails_id = $this->getDefinedTable(Pswf\TransactiondetailTable::class)->get(array('td.transaction'=>$this->_id));
-			$result = false;
-			$result2 = 0;
-			foreach($transactiondetails_id as $transactiondetails_ids):
-				$result = $this->getDefinedTable(Pswf\TransactiondetailTable::class)->remove($transactiondetails_ids['id']);
-			endforeach;
-			if($result):
-			$result2 = $this->getDefinedTable(Pswf\TransactionTable::class)->remove($this->_id);
-			endif;
-			if($result2 > 0):
-				$this->flashMessenger()->addMessage("success^ successfully deleted  data");
-			else:
-				$this->flashMessenger()->addMessage("notice^ Failed to delete  data");
-			endif;
-			if($voucher==1):
-				return $this->redirect()->toRoute('transaction', array('action'=>'contra'));
-			else:
-				return $this->redirect()->toRoute('transaction', array('action'=>'debit'));
-			endif;
-		}
-		$ViewModel = new ViewModel(array(
-			'title' => 'Delete Contra',
-			'trans'    =>$this->getDefinedTable(Pswf\TransactionTable::class)->get($this->_id),
-		));
-			$ViewModel->setTerminal(True);
-		return $ViewModel;
 	}
 	/**
 	 *  add transaction action
@@ -2494,6 +2574,10 @@ class TransactionController extends AbstractActionController
 	public function editcontraAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction');
+		}
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
 			//generate voucher no
@@ -2620,6 +2704,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewcontraAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction');
+		}
 		if($this->_login_role==100):
 		    $edit_option = 1;
 		else:
@@ -2727,12 +2815,8 @@ class TransactionController extends AbstractActionController
 		}
 		}
 		$user_id=$this->_login_id;
-		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
-		if($this->_login_role==100||$this->_login_role==99):
-		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
-		else:
-		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,$user_region);
-		endif;
+		$transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
+		$transTable = $this->filterVisibleTransactions($transTable);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 			
 		$page = 1;
@@ -2980,12 +3064,17 @@ class TransactionController extends AbstractActionController
 	public function editagainstAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction', array('action' => 'against'));
+		}
 		$status = $this->getDefinedTable(Pswf\TransactionTable::class)->getColumn($this->_id,'status');
 		if($status >= 3):
 			$this->redirect()->toRoute('transaction');
 		endif;
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			$reference = (isset($form['reference']) && is_array($form['reference'])) ? $form['reference'] : array();
 			//generate voucher no
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getColumn($this->_user->location, 'location_code');
 			$prefix = $this->getDefinedTable(Pswf\JournalTable::class)->getColumn($form['voucher_type'],'prefix');
@@ -3007,7 +3096,8 @@ class TransactionController extends AbstractActionController
 				'remark' => $form['remark'],
 				'status' => 2, // status pending 
 				'modified' =>$this->_modified,
-			);			
+			);
+			$data1['against_vid'] = implode(',', $reference);
 			$data1 = $this->_safedataObj->rteSafe($data1);
 			$this->_connection->beginTransaction(); //***Transaction begins here***//
 			$result = $this->getDefinedTable(Pswf\TransactionTable::class)->save($data1);
@@ -3031,6 +3121,7 @@ class TransactionController extends AbstractActionController
 								'activity' => $location[$i],
 								'head' => $head[$i],
 								'sub_head' => $sub_head[$i],
+								'against' => isset($reference[$i]) ? $reference[$i] : 0,
 								'bank_ref_type' => '',
 								'cheque_no' => $cheque_no[$i],
 								'debit' => (isset($debit[$i]))? $debit[$i]:'0.00',
@@ -3047,6 +3138,7 @@ class TransactionController extends AbstractActionController
 								'activity' => $location[$i],
 								'head' => $head[$i],
 								'sub_head' => $sub_head[$i],
+								'against' => isset($reference[$i]) ? $reference[$i] : 0,
 								'bank_ref_type' => '',
 								'cheque_no' => $cheque_no[$i],
 								'debit' => (isset($debit[$i]))? $debit[$i]:'0.00',
@@ -3105,6 +3197,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewagainstAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction', array('action' => 'against'));
+		}
 		return new ViewModel(array(
 		    'login_id'  =>$this->_login_id,
 			'transactionrow' => $this->getDefinedTable(Pswf\TransactionTable::class)->get($this->_id),
@@ -3222,8 +3318,9 @@ class TransactionController extends AbstractActionController
 		if($this->_login_role==100||$this->_login_role==99):
 		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
 		else:
-		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,$user_region);
+		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,'-1');
 		endif;
+		$transTable = $this->filterVisibleTransactions($transTable);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 			
 		$page = 1;
@@ -3390,12 +3487,17 @@ class TransactionController extends AbstractActionController
 	public function editagainstdebitAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction', array('action' => 'againstdebit'));
+		}
 		$status = $this->getDefinedTable(Pswf\TransactionTable::class)->getColumn($this->_id,'status');
 		//if($status >= 3):
 			//$this->redirect()->toRoute('transaction');
 		//endif;
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
+			$reference = (isset($form['reference']) && is_array($form['reference'])) ? $form['reference'] : array();
 			//generate voucher no
 			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getColumn($this->_user->location, 'location_code');
 			$prefix = $this->getDefinedTable(Pswf\JournalTable::class)->getColumn($form['voucher_type'],'prefix');
@@ -3417,7 +3519,10 @@ class TransactionController extends AbstractActionController
 				'remark' => $form['remark'],
 				//'status' => 2, // status pending 
 				'modified' =>$this->_modified,
-			);			
+			);
+			if($form['doc_id'] != "Payroll"):
+				$data1['against_vid'] = implode(',', $reference);
+			endif;
 			$data1 = $this->_safedataObj->rteSafe($data1);
 			$this->_connection->beginTransaction(); //***Transaction begins here***//
 			$result = $this->getDefinedTable(Pswf\TransactionTable::class)->save($data1);
@@ -3441,6 +3546,7 @@ class TransactionController extends AbstractActionController
 								'activity' => $location[$i],
 								'head' => $head[$i],
 								'sub_head' => $sub_head[$i],
+								'against' => isset($reference[$i]) ? $reference[$i] : 0,
 								'bank_ref_type' => '',
 								'cheque_no' => $cheque_no[$i],
 								'debit' => (isset($debit[$i]))? $debit[$i]:'0.00',
@@ -3457,6 +3563,7 @@ class TransactionController extends AbstractActionController
 								'activity' => $location[$i],
 								'head' => $head[$i],
 								'sub_head' => $sub_head[$i],
+								'against' => isset($reference[$i]) ? $reference[$i] : 0,
 								'bank_ref_type' => '',
 								'cheque_no' => $cheque_no[$i],
 								'debit' => (isset($debit[$i]))? $debit[$i]:'0.00',
@@ -3515,6 +3622,10 @@ class TransactionController extends AbstractActionController
 	public function editagainstpayrollAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction');
+		}
 		$status = $this->getDefinedTable(Pswf\TransactionTable::class)->getColumn($this->_id,'status');
 		//if($status >= 3):
 			//$this->redirect()->toRoute('transaction');
@@ -3594,6 +3705,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewagainstdebitAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction');
+		}
 		$application_id = $this->_id;
 		return new ViewModel(array(
 		    'login_id'     =>$this->_login_id,
@@ -3690,8 +3805,9 @@ class TransactionController extends AbstractActionController
 		if($this->_login_role==100||$this->_login_role==99):
 		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
 		else:
-		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,$user_region);
+		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,'-1');
 		endif;
+		$transTable = $this->filterVisibleTransactions($transTable);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 			
 		$page = 1;
@@ -3850,6 +3966,10 @@ class TransactionController extends AbstractActionController
 	public function editiwrAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction');
+		}
 		if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getpost();
 			//generate voucher no
@@ -3978,6 +4098,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewiwrAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction');
+		}
 		if($this->_login_role==100):
 		    $edit_option = 1;
 		else:
@@ -4071,10 +4195,11 @@ class TransactionController extends AbstractActionController
 		if($this->_login_role==100||$this->_login_role==99||$this->_login_role==8):
 		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWiseA('voucher_date',$year,$month,$date);
 		else:
-		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,$user_region);
+		    $transTable = $this->getDefinedTable(Pswf\TransactionTable::class)->getDateWise('voucher_date',$year,$month,$date,'-1');
 		endif;
 		//echo '<pre>';print_r($transTable);exit;
 		$user_region= $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_login_id,'region');
+		$transTable = $this->filterVisibleTransactions($transTable);
 		$paginator = new \Laminas\Paginator\Paginator(new \Laminas\Paginator\Adapter\ArrayAdapter($transTable));
 			
 		$page = 1;
@@ -4357,6 +4482,10 @@ class TransactionController extends AbstractActionController
 	public function editiwrreceiptAction()
 	{
 		$this->init();
+		if (!$this->canAccessTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to edit this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction');
+		}
 		$status = $this->getDefinedTable(Pswf\TransactionTable::class)->getColumn($this->_id,'status');
 		if($status >= 3):
 			$this->redirect()->toRoute('transaction');
@@ -4474,6 +4603,10 @@ class TransactionController extends AbstractActionController
 	 **/
 	public function viewiwrreceiptAction(){
 		$this->init();
+		if (!$this->canViewTransaction((int) $this->_id)) {
+			$this->flashMessenger()->addMessage('error^ You do not have permission to access this transaction.');
+			return $this->redirect()->toRoute('pswf/transaction');
+		}
 		//$commission = $this->getDefinedTable(Pswf\TransactiondetailTable::class)->get(array('transaction' => $this->_id));
 		//foreach(($commission as $ca);
 		//$transaction_id=$ca['transaction'];

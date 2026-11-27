@@ -45,9 +45,7 @@
 					<a class="btn btn-xs btn-info" href="<?php echo $this->url('batch', array('action' => 'editbatch', 'id' => $batch_id)); ?>" title="Edit">
 						<i class="ace-icon fa fa-pencil bigger-120" ></i> 
 					</a>
-					<a data-toggle="modal" data-target = "#modal" class="btn btn-xs btn-danger" href="<?php echo $this->url('acl', array('action' => 'activitylog', 'id' => "13-".$batch_id)); ?>" title="View Activity Logs">
-						<i class="ace-icon fa fa-plus bigger-120" ></i>  
-					</a>
+					<?php echo $this->button(6, "13-".$batch_id, 0, 3);?>
 				</div>
 				
 			</div>

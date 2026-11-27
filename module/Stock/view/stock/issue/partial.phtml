@@ -1,0 +1,19 @@
+<?php // partial.phtml 
+	$issue = ($this->active == "issue")?"active":"";
+	$issuereport = ($this->active == "issuereport")?"active":"";
+?>
+<ul class="nav nav-tabs padding-18 nav-fixed-top" id="myTab">
+	<li class="<?php echo $issue; ?>">
+		<a href="<?php echo $this->url('inissue', array('action' => 'index')); ?>" title="Issue of Items">
+			<i class="orange ace-icon fa fa-cubes bigger-120"></i>
+			<span class="hidden-xs">Stock Issue</span>
+		</a>
+	</li>
+	<li class="<?php echo $issuereport; ?>">
+		<a href="<?php echo $this->url('inissue', array('action' => 'issuereport')); ?>" title="Check reorder level of goods">
+			<i class="red ace-icon fa fa-file-text-o bigger-120"></i>
+			<span class="hidden-xs">Issue Report</span>
+		</a>
+	</li>
+</ul>
+

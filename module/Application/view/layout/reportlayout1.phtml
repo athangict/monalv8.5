@@ -42,7 +42,7 @@ $skinClass = isset($skinClassMap[$appTemplate]) ? $skinClassMap[$appTemplate] : 
         <?php echo $this->headScript()->prependFile($this->basePath() . '/js/respond.min.js', 'text/javascript', array('conditional' => 'IE'))
 									->prependFile($this->basePath() . '/js/html5shiv.min.js', 'text/javascript', array('conditional' => 'IE'))
 									->prependFile($this->basePath() . '/js/jquery.browser.js')
-									->prependFile($this->basePath() . '/js/ch_genpdf.js')
+									->prependFile($this->basePath() . '/js/ch_genpdf.js?v=' . filemtime(dirname(__DIR__, 4) . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'js' . DIRECTORY_SEPARATOR . 'ch_genpdf.js'))
 									->prependFile($this->basePath() . '/js/ch_addrow.js')
 									->prependFile($this->basePath() . '/js/jquery.mousewheel.js')
 									->prependFile($this->basePath() . '/js/jquery.jscrollpane.custom.min.js')

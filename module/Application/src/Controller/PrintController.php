@@ -41,6 +41,11 @@ class PrintController extends AbstractActionController
 			word-wrap: break-word;
 			border-collapse: collapse;
 		}
+		.table{
+			width:100% !important;
+			table-layout:auto !important;
+			margin:0 !important;
+		}
 		.table td, .table th {
 			border: 1px solid #dddddd;
 			text-align: left;
@@ -110,7 +115,7 @@ class PrintController extends AbstractActionController
 		$pdf->SetTitle($data['title']);
 		$pdf->SetFont('times', '', 10, '', false);
 		
-		$pdf->SetMargins(12, 10, 15); // Increase the values as needed
+		$pdf->SetMargins(10, 10, 10);
 		$pdf->SetHeaderMargin(3);
 		$pdf->SetFooterMargin(5);
         
@@ -126,30 +131,39 @@ class PrintController extends AbstractActionController
 		// Determine the absolute path to the public folder
 		$publicPath = getcwd() . '/public/';
 
-		// Resolve a best-effort header image path; continue without image if none exists.
-		$headerCandidates = ($data['orentation']=="P")
-			? array('images/bhutanpostheader.jpg', 'images/header3.jpg')
-			: array('images/header3.jpg', 'images/bhutanpostheader.jpg');
+		$hideHeader = isset($data['hide_header']) && ((string)$data['hide_header'] === '1');
+		if($hideHeader):
+			$pdf->setPrintHeader(false);
+		endif;
+		if(!$hideHeader):
+			// Resolve a best-effort header image path; continue without image if none exists.
+			$headerCandidates = ($data['orentation']=="P")
+				? array('images/bhutanpostheader.jpg', 'images/header3.jpg')
+				: array('images/header3.jpg', 'images/bhutanpostheader.jpg');
 
-		$headerImagePath = null;
-		foreach($headerCandidates as $candidate){
-			$candidatePath = $publicPath . $candidate;
-			if(file_exists($candidatePath)){
-				$headerImagePath = $candidatePath;
-				break;
+			$headerImagePath = null;
+			foreach($headerCandidates as $candidate){
+				$candidatePath = $publicPath . $candidate;
+				if(file_exists($candidatePath)){
+					$headerImagePath = $candidatePath;
+					break;
+				}
 			}
-		}
 
-		if ($headerImagePath !== null) {
-			if($data['orentation']=="P"){$pdf->Image($headerImagePath, 10, 10, 190, 30, '', '', '', false, 300, '', false, false, 0, false, false, false);}
-			else{$pdf->Image($headerImagePath, 10, 10, 270, 27, '', '', '', false, 300, '', false, false, 0, false, false, false);}
-			$pdf->Ln(16);
-		}
+			if ($headerImagePath !== null) {
+				if($data['orentation']=="P"){$pdf->Image($headerImagePath, 10, 10, 190, 30, '', '', '', false, 300, '', false, false, 0, false, false, false);}
+				else{$pdf->Image($headerImagePath, 10, 10, 270, 27, '', '', '', false, 300, '', false, false, 0, false, false, false);}
+				$pdf->Ln(16);
+			}
+		endif;
 
-		// Write HTML content to the PDF
-		$pdf->writeHTML($html, true, false, true, false, '');
+		// Write HTML content to the PDF using full printable width
+		$margins = $pdf->getMargins();
+		$contentWidth = $pdf->getPageWidth() - $margins['left'] - $margins['right'];
+		$pdf->writeHTMLCell($contentWidth, 0, $margins['left'], '', $html, 0, 1, 0, true, '', true);
 
 		// Output the PDF
 		$pdf->Output();
     }
 }
+

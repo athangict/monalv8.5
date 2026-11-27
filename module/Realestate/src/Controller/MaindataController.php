@@ -155,7 +155,8 @@ class MaindataController extends AbstractActionController
 			$data=$this->_safedataObj->rteSafe($data);
 			$this->_connection->beginTransaction(); //transaction begins here
 			$result = $this->getDefinedTable(Realestate\BuildingMasterTable::class)->save($data);
-			if($result){
+			$configSaved = ($result) ? $this->saveBuildingRentConfig($result, $form) : false;
+			if($result && $configSaved){
 				$this->_connection->commit();
 				$this->flashMessenger()->addMessage("success^ Action Successful");
 			}else{
@@ -169,6 +170,7 @@ class MaindataController extends AbstractActionController
 			'region'		=>$this->getDefinedTable(Administration\RegionTable::class)->getAll(),
 			'employees'		=>$this->getDefinedTable(Hr\EmployeeTable::class)->getAll(),
 			'assettypes'		=>$this->getDefinedTable(Asset\AssettypeTable::class)->get(array('id'=>[6,7])),
+			'heads'			=>$this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
 	
 		));
 		
@@ -203,7 +205,8 @@ class MaindataController extends AbstractActionController
 			$data = $this->_safedataObj->rteSafe($data);
 			$this->_connection->beginTransaction(); //transaction begins here
 			$result = $this->getDefinedTable(Realestate\BuildingMasterTable::class)->save($data);
-			if($result){
+			$configSaved = $this->saveBuildingRentConfig($id, $form);
+			if($result && $configSaved){
 				$this->_connection->commit();
 				$this->flashMessenger()->addMessage("success^ Action Successful");
 			}else{
@@ -219,7 +222,137 @@ class MaindataController extends AbstractActionController
 			'locations' =>$this->getDefinedTable(Administration\LocationTable::class)->getAll(),
 			'regions' =>$this->getDefinedTable(Administration\RegionTable::class)->getAll(),
 			'employees' => $this->getDefinedTable(Hr\EmployeeTable::class)->getAll(),
+			'heads' => $this->getDefinedTable(Accounts\HeadTable::class)->getAll(),
+			'rentConfig' => $this->getBuildingRentConfig($id),
+			'rentAssets' => $this->getBuildingRentAssets($id),
+			'rentSubheads' => $this->getBuildingRentSubheads($id),
 		));
+	}
+
+	public function getassetbyblockAction()
+	{
+		$this->init();
+		$form = $this->getRequest()->getPost();
+		$type = isset($form['block']) ? (int)$form['block'] : 0;
+		$assets = ($type > 0) ? $this->getDefinedTable(Realestate\BuildingMasterTable::class)->get(array('type' => $type)) : array();
+
+		$options = "<option value=''></option>";
+		foreach($assets as $asset):
+			$options .= "<option value='".$asset['id']."'>".$asset['name']."</option>";
+		endforeach;
+		echo json_encode(array('asset' => $options));
+		exit;
+	}
+
+	public function getsubheadAction()
+	{
+		$this->init();
+		$form = $this->getRequest()->getPost();
+		$head = isset($form['head']) ? (int)$form['head'] : 0;
+		$subheads = ($head > 0) ? $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.head' => $head)) : array();
+
+		$options = "<option value=''></option>";
+		foreach($subheads as $subhead):
+			$options .= "<option value='".$subhead['id']."'>".$subhead['code']." - ".$subhead['name']."</option>";
+		endforeach;
+		echo json_encode(array('subhead' => $options));
+		exit;
+	}
+
+	private function saveBuildingRentConfig($buildingMasterId, $form)
+	{
+		$this->ensureBuildingRentConfigTable();
+		$generateRent = (isset($form['generate_rent']) && (int)$form['generate_rent'] === 1) ? 1 : 0;
+		$block = (int)($form['rent_block'] ?? 0);
+		$asset = (int)($form['rent_asset'] ?? 0);
+		$head = (int)($form['rent_head'] ?? 0);
+		$subHead = (int)($form['rent_sub_head'] ?? 0);
+		if ($generateRent !== 1) {
+			$head = 0;
+			$subHead = 0;
+		}
+
+		$table = $this->getDefaultTable('rs_building_rent_config');
+		$existing = $table->select(array('building_master' => $buildingMasterId))->current();
+		$data = array(
+			'building_master' => $buildingMasterId,
+			'rent_block' => $block,
+			'rent_asset' => $asset,
+			'generate_rent' => $generateRent,
+			'rent_head' => $head,
+			'rent_sub_head' => $subHead,
+			'author' => $this->_author,
+			'created' => $this->_created,
+			'modified' => $this->_modified,
+		);
+		$data = $this->_safedataObj->rteSafe($data);
+		if ($existing) {
+			$existingId = is_array($existing) ? $existing['id'] : $existing->id;
+			$result = $table->update($data, array('id' => $existingId));
+			return ($result >= 0);
+		}
+		$result = $table->insert($data);
+		return ($result > 0);
+	}
+
+	private function getBuildingRentConfig($buildingMasterId)
+	{
+		$this->ensureBuildingRentConfigTable();
+		$row = $this->getDefaultTable('rs_building_rent_config')->select(array('building_master' => $buildingMasterId))->current();
+		if ($row) {
+			$rowData = is_array($row) ? $row : (array)$row;
+			return array(
+				'generate_rent' => (int)($rowData['generate_rent'] ?? 0),
+				'rent_block' => (int)($rowData['rent_block'] ?? 0),
+				'rent_asset' => (int)($rowData['rent_asset'] ?? 0),
+				'rent_head' => (int)($rowData['rent_head'] ?? 0),
+				'rent_sub_head' => (int)($rowData['rent_sub_head'] ?? 0),
+			);
+		}
+		return array(
+			'generate_rent' => 0,
+			'rent_block' => 0,
+			'rent_asset' => 0,
+			'rent_head' => 0,
+			'rent_sub_head' => 0,
+		);
+	}
+
+	private function getBuildingRentAssets($buildingMasterId)
+	{
+		$config = $this->getBuildingRentConfig($buildingMasterId);
+		if ($config['rent_block'] > 0) {
+			return $this->getDefinedTable(Realestate\BuildingMasterTable::class)->get(array('type' => $config['rent_block']));
+		}
+		return array();
+	}
+
+	private function getBuildingRentSubheads($buildingMasterId)
+	{
+		$config = $this->getBuildingRentConfig($buildingMasterId);
+		if ($config['rent_head'] > 0) {
+			return $this->getDefinedTable(Accounts\SubheadTable::class)->get(array('sh.head' => $config['rent_head']));
+		}
+		return array();
+	}
+
+	private function ensureBuildingRentConfigTable()
+	{
+		$sql = "CREATE TABLE IF NOT EXISTS `rs_building_rent_config` (
+			`id` bigint(20) NOT NULL AUTO_INCREMENT,
+			`building_master` bigint(20) NOT NULL,
+			`rent_block` int(11) DEFAULT NULL,
+			`rent_asset` bigint(20) DEFAULT NULL,
+			`generate_rent` tinyint(1) NOT NULL DEFAULT 0,
+			`rent_head` int(11) DEFAULT NULL,
+			`rent_sub_head` int(11) DEFAULT NULL,
+			`author` int(11) DEFAULT NULL,
+			`created` datetime DEFAULT NULL,
+			`modified` datetime DEFAULT NULL,
+			PRIMARY KEY (`id`),
+			UNIQUE KEY `uk_building_master` (`building_master`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci";
+		$this->_container->get('Laminas\Db\Adapter\Adapter')->query($sql, 'execute');
 	}
 	
 	//Floor

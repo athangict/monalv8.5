@@ -12,6 +12,7 @@ use Laminas\Db\Sql\Expression;
 class IssueDetailsTable extends AbstractTableGateway 
 {
 	protected $table = 'in_issue_details'; //tablename
+	protected $tableColumns;
     
 	public function __construct(Adapter $adapter)
     {
@@ -28,8 +29,9 @@ class IssueDetailsTable extends AbstractTableGateway
 	    $sql = new Sql($adapter);
 	    $select = $sql->select();
 	    $select->from(array('d' => $this->table))
+			   ->columns($this->getSelectableDetailColumns())
 			   ->join(array('u'=>'st_uom'),'u.id = d.uom', array('uom'=>'code','uom_id' => 'id'))
-			   ->join(array('i'=>'st_items'),'i.id = d.item', array('item'=>'code','item_id' => 'id'))
+	    	   ->join(array('i'=>'st_items'),'i.id = d.item', array('item'=>'name','item_code' => 'code','item_id' => 'id'))
 	    	   ->order(array('id DESC'));
 	    
 	    $selectString = $sql->getSqlStringForSqlObject($select);
@@ -49,7 +51,8 @@ class IssueDetailsTable extends AbstractTableGateway
 		$sql = new Sql($adapter);
 		$select = $sql->select();
 		$select->from(array('d' => $this->table))
-			   ->join(array('i'=>'in_items'),'i.id = d.item', array('item'=>'code','item_id' => 'id'))
+			   ->columns($this->getSelectableDetailColumns())
+			   ->join(array('i'=>'st_items'),'i.id = d.item', array('item'=>'name','item_code' => 'code','item_id' => 'id'))
 			   ->where($where);
 		
 		$selectString = $sql->getSqlStringForSqlObject($select);
@@ -67,7 +70,8 @@ class IssueDetailsTable extends AbstractTableGateway
 	public function getColumn($param, $column)
 	{
 		$where = ( is_array($param) )? $param: array('id' => $param);
-		$fetch = array($column);
+		$fetchColumn = $this->normalizeColumnName($column);
+		$fetch = array($fetchColumn);
 		$adapter = $this->adapter;
 		$sql = new Sql($adapter);
 		$select = $sql->select();
@@ -80,7 +84,7 @@ class IssueDetailsTable extends AbstractTableGateway
 		$results = $adapter->query($selectString, $adapter::QUERY_MODE_EXECUTE)->toArray();
 	
 		foreach ($results as $result):
-		$columns =  $result[$column];
+		$columns =  $result[$fetchColumn];
 		endforeach;
 		 
 		return $columns;
@@ -94,6 +98,8 @@ class IssueDetailsTable extends AbstractTableGateway
 	public function save($data)
 	{
 	    if ( !is_array($data) ) $data = $data->toArray();
+		$data = $this->normalizeDetailDataForSchema($data);
+		$data = $this->filterDataByExistingColumns($data);
 	    $id = isset($data['id']) ? (int)$data['id'] : 0;
 	    
 	    if ( $id > 0 )
@@ -104,6 +110,128 @@ class IssueDetailsTable extends AbstractTableGateway
 	    	$result = $this->getLastInsertValue(); 
 	    }	    	    
 	    return $result;	     
+	}
+
+	protected function filterDataByExistingColumns(array $data)
+	{
+		$columns = $this->getTableColumns();
+		if (empty($columns)) {
+			return $data;
+		}
+		return array_intersect_key($data, array_flip($columns));
+	}
+
+	protected function getTableColumns()
+	{
+		if (is_array($this->tableColumns)) {
+			return $this->tableColumns;
+		}
+		$sql = sprintf('SHOW COLUMNS FROM `%s`', $this->table);
+		$results = $this->adapter->query($sql, $this->adapter::QUERY_MODE_EXECUTE)->toArray();
+		$columns = array();
+		foreach ($results as $row) {
+			if (isset($row['Field'])) {
+				$columns[] = $row['Field'];
+			}
+		}
+		$this->tableColumns = $columns;
+		return $this->tableColumns;
+	}
+
+	protected function hasColumn($column)
+	{
+		return in_array($column, $this->getTableColumns(), true);
+	}
+
+	protected function normalizeColumnName($column)
+	{
+		if ($column === 'quantity' && !$this->hasColumn('quantity') && $this->hasColumn('issue_quantity')) {
+			return 'issue_quantity';
+		}
+		if ($column === 'quantity' && !$this->hasColumn('quantity') && $this->hasColumn('issue_qty')) {
+			return 'issue_qty';
+		}
+		if ($column === 'issue_quantity' && !$this->hasColumn('issue_quantity') && $this->hasColumn('quantity')) {
+			return 'quantity';
+		}
+		if ($column === 'issue_qty' && !$this->hasColumn('issue_qty') && $this->hasColumn('quantity')) {
+			return 'quantity';
+		}
+		if ($column === 'issue_quantity' && !$this->hasColumn('issue_quantity') && $this->hasColumn('issue_qty')) {
+			return 'issue_qty';
+		}
+		if ($column === 'issue_qty' && !$this->hasColumn('issue_qty') && $this->hasColumn('issue_quantity')) {
+			return 'issue_quantity';
+		}
+		if ($column === 'stock_quantity' && !$this->hasColumn('stock_quantity') && $this->hasColumn('stock_qty')) {
+			return 'stock_qty';
+		}
+		if ($column === 'stock_qty' && !$this->hasColumn('stock_qty') && $this->hasColumn('stock_quantity')) {
+			return 'stock_quantity';
+		}
+		return $column;
+	}
+
+	protected function normalizeDetailDataForSchema(array $data)
+	{
+		if (isset($data['quantity']) && !$this->hasColumn('quantity') && $this->hasColumn('issue_quantity') && !isset($data['issue_quantity'])) {
+			$data['issue_quantity'] = $data['quantity'];
+		}
+		if (isset($data['quantity']) && !$this->hasColumn('quantity') && $this->hasColumn('issue_qty') && !isset($data['issue_qty'])) {
+			$data['issue_qty'] = $data['quantity'];
+		}
+		if (isset($data['issue_quantity']) && !$this->hasColumn('issue_quantity') && $this->hasColumn('quantity') && !isset($data['quantity'])) {
+			$data['quantity'] = $data['issue_quantity'];
+		}
+		if (isset($data['issue_qty']) && !$this->hasColumn('issue_qty') && $this->hasColumn('quantity') && !isset($data['quantity'])) {
+			$data['quantity'] = $data['issue_qty'];
+		}
+		if (isset($data['issue_quantity']) && !$this->hasColumn('issue_quantity') && $this->hasColumn('issue_qty') && !isset($data['issue_qty'])) {
+			$data['issue_qty'] = $data['issue_quantity'];
+		}
+		if (isset($data['issue_qty']) && !$this->hasColumn('issue_qty') && $this->hasColumn('issue_quantity') && !isset($data['issue_quantity'])) {
+			$data['issue_quantity'] = $data['issue_qty'];
+		}
+		if (isset($data['stock_quantity']) && !$this->hasColumn('stock_quantity') && $this->hasColumn('stock_qty') && !isset($data['stock_qty'])) {
+			$data['stock_qty'] = $data['stock_quantity'];
+		}
+		if (isset($data['stock_qty']) && !$this->hasColumn('stock_qty') && $this->hasColumn('stock_quantity') && !isset($data['stock_quantity'])) {
+			$data['stock_quantity'] = $data['stock_qty'];
+		}
+		if (isset($data['from_balance']) && !isset($data['stock_quantity']) && !isset($data['stock_qty'])) {
+			$data['stock_quantity'] = $data['from_balance'];
+		}
+		return $data;
+	}
+
+	protected function getSelectableDetailColumns()
+	{
+		$columns = array('*');
+		if (!$this->hasColumn('quantity') && $this->hasColumn('issue_quantity')) {
+			$columns['quantity'] = new Expression('d.issue_quantity');
+		}
+		if (!$this->hasColumn('quantity') && $this->hasColumn('issue_qty')) {
+			$columns['quantity'] = new Expression('d.issue_qty');
+		}
+		if (!$this->hasColumn('issue_quantity') && $this->hasColumn('quantity')) {
+			$columns['issue_quantity'] = new Expression('d.quantity');
+		}
+		if (!$this->hasColumn('issue_qty') && $this->hasColumn('quantity')) {
+			$columns['issue_qty'] = new Expression('d.quantity');
+		}
+		if (!$this->hasColumn('issue_quantity') && $this->hasColumn('issue_qty')) {
+			$columns['issue_quantity'] = new Expression('d.issue_qty');
+		}
+		if (!$this->hasColumn('issue_qty') && $this->hasColumn('issue_quantity')) {
+			$columns['issue_qty'] = new Expression('d.issue_quantity');
+		}
+		if (!$this->hasColumn('stock_quantity') && $this->hasColumn('stock_qty')) {
+			$columns['stock_quantity'] = new Expression('d.stock_qty');
+		}
+		if (!$this->hasColumn('stock_qty') && $this->hasColumn('stock_quantity')) {
+			$columns['stock_qty'] = new Expression('d.stock_quantity');
+		}
+		return $columns;
 	}
 
 	/**

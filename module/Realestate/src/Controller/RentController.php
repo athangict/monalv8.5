@@ -108,7 +108,7 @@ class RentController extends AbstractActionController
     //Real Estate Details view page
     public function indexAction()   
     {
-          $this->init();
+        $this->init();
         if($this->getRequest()->isPost()){
 			$form = $this->getRequest()->getPost();
 			$year = $form['year'];
@@ -118,15 +118,32 @@ class RentController extends AbstractActionController
 			$month = (int)date('m');
         }
         $admin_locs = $this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_author,'admin_location');
+        $currentUserRole = (string)$this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_author,'role');
+        $userRoles = array_map('trim', explode(',', (string)$this->_login_role));
+        $isPrivilegedRole = in_array('99', $userRoles, true)
+            || in_array('100', $userRoles, true)
+            || in_array('99', array_map('trim', explode(',', $currentUserRole)), true)
+            || in_array('100', array_map('trim', explode(',', $currentUserRole)), true)
+            || in_array((string)$this->_highest_role, $userRoles, true);
+        $generateLocation = $isPrivilegedRole ? '-1' : $admin_locs;
+        $rentlistFilter = $isPrivilegedRole ? array() : array('bm.location'=> $admin_locs);
+        $tenantFilter = array('lr.status' => 1);
+        if (!$isPrivilegedRole) {
+            $tenantFilter['b.location'] = $admin_locs;
+        }
+        $canGenerateRent = sizeof($this->getDefinedTable(Realestate\LeasedRentTable::class)->getTenant($tenantFilter)) > 0;
 	
         return new ViewModel(array( 
             'title' => 'Rent',
             'year' =>$year,
             'month' =>$month,
-            'role'=>$this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_author,'role'),
+            'role'=>$currentUserRole,
             'rent' => $this->getDefinedTable(Realestate\RentTable::class)->getRent($year),
-            'rentlist' => $this->getDefinedTable(Realestate\LeasedRentTable::class)->getrentlist(array('bm.location'=> $admin_locs)),
+            'rentlist' => $this->getDefinedTable(Realestate\LeasedRentTable::class)->getrentlist($rentlistFilter),
 			'admin_locs' => $admin_locs,
+			'generate_location' => $generateLocation,
+			'is_highest_role' => $isPrivilegedRole,
+			'can_generate_rent' => $canGenerateRent,
 			'rentObj' => $this->getDefinedTable(Realestate\RentTable::class),
 			'lesserentObj' => $this->getDefinedTable(Realestate\LeasedRentTable::class),
     
@@ -136,58 +153,107 @@ class RentController extends AbstractActionController
     public function generaterentAction()
     {
         $this->init();
-        $my = explode('-', (string) $this->_id);
-        $tenants = $this->getDefinedTable(Realestate\LeasedRentTable::class)->getTenant(array('lr.status'=>1,'b.location'=>$my[2]));
-			foreach($tenants as $row):
-			$floor=$this->getDefinedTable(Realestate\FlatTable::class)->getColumn($row['flat'],'floor');
-			$flat_status=$this->getDefinedTable(Realestate\FlatTable::class)->getColumn($row['flat'],'flat_status');
-			if($flat_status==1){
-			   $data = array(
-					'building' 	=> $row['building'],
-					'floor' 	=> $floor,
-					'flat' 		=> $row['flat'],
-					'tenant' 	=> $row['lesse_name'],
-					'location' 	=> $my[2],
-					'rent' 		=> $row['rent'],
-					'year' 		=> $my[0],
-					'month' 	=> $my[1],
-					'ref_no' 	=> $my[1].",".$my[0],
-					'status' 	=> 2,
-					'author' 	=> $this->_author,
-					'created' 	=> $this->_created,
-					'modified' 	=> $this->_modified,
-				);
-				//echo '<pre>';print_r($data);exit;
-				$result = $this->getDefinedTable(Realestate\RentTable::class)->save($data);
+        $my = explode('-', (string) $this->_id, 3);
+        if (!isset($my[2]) || $my[2] === '') {
+            $my[2] = '-1';
+        }
+        $tenantFilter = array('lr.status'=>1);
+        if (isset($my[2]) && $my[2] !== '-1') {
+            $tenantFilter['b.location'] = $my[2];
+        }
+        $tenants = $this->getDefinedTable(Realestate\LeasedRentTable::class)->getTenant($tenantFilter);
+        $inserted = 0;
+        $skippedFloor = 0;
+        $skippedLocation = 0;
+        $firstIssue = '';
+		foreach($tenants as $row):
+        	$flatId = $row['flat'];
+        	$floor = $this->getDefinedTable(Realestate\FlatTable::class)->getColumn($flatId,'floor');
+        	if (empty($floor)) {
+        		$flatInfo = $this->getDefinedTable(Realestate\FlatTable::class)->get(array('flat_no' => $row['flat'], 'building' => $row['building']));
+        		if (sizeof($flatInfo) > 0) {
+        			$flatId = $flatInfo[0]['id'];
+        			$floor = $flatInfo[0]['floor'];
+        			$this->getDefinedTable(Realestate\LeasedRentTable::class)->save(array(
+        				'id' => $row['id'],
+        				'flat' => $flatId,
+        				'author' => $this->_author,
+        				'created' => $this->_created,
+        				'modified' => $this->_modified,
+        			));
+        		}
+        	}
+			if (empty($floor)) {
+				$skippedFloor++;
+				if ($firstIssue === '') {
+					$firstIssue = "Tenant ID ".$row['lesse_name']." has no flat/floor mapping (leased_rent.flat=".$row['flat'].", building=".$row['building'].")";
+				}
+				continue;
 			}
-			endforeach;
-            if ($result) {
-                $this->flashMessenger()->addMessage("success^ Action Successful");
-            } else {
-
-                $this->flashMessenger()->addMessage("error^ Failed to perform the Action, Try again");
-            }
-            return $this->redirect()->toRoute('rent',array('action' => 'index'));
+			$tenantLocation = isset($row['location']) ? $row['location'] : null;
+			if (empty($tenantLocation) || $tenantLocation === '-1') {
+				$tenantLocation = $this->getDefinedTable(Realestate\BuildingTable::class)->getColumn($row['building'], 'location');
+			}
+			if (empty($tenantLocation) || $tenantLocation === '-1') {
+				$skippedLocation++;
+				if ($firstIssue === '') {
+					$firstIssue = "Tenant ID ".$row['lesse_name']." has no valid location (building=".$row['building'].")";
+				}
+				continue;
+			}
+			$data = array(
+				'building' 	=> $row['building'],
+				'floor' 	=> $floor,
+				'flat' 		=> $flatId,
+				'tenant' 	=> $row['lesse_name'],
+				'location' 	=> $tenantLocation,
+				'rent' 		=> $row['rent'],
+				'year' 		=> $my[0],
+				'month' 	=> $my[1],
+				'ref_no' 	=> $my[1].",".$my[0],
+				'status' 	=> 2,
+				'author' 	=> $this->_author,
+				'created' 	=> $this->_created,
+				'modified' 	=> $this->_modified,
+			);
+			$saveResult = $this->getDefinedTable(Realestate\RentTable::class)->save($data);
+			if ($saveResult) {
+				$inserted++;
+			}
+		endforeach;
+        if ($inserted > 0) {
+            $this->flashMessenger()->addMessage("success^ Action Successful (Generated ".$inserted." rent entries)");
+        } elseif (sizeof($tenants) < 1) {
+            $this->flashMessenger()->addMessage("error^ No active tenant found to generate rent");
+        } else {
+            $this->flashMessenger()->addMessage("error^ No rent generated. Missing floor mapping: ".$skippedFloor.", missing location: ".$skippedLocation.". Issue: ".$firstIssue);
+        }
+        return $this->redirect()->toRoute('rent',array('action' => 'index'));
 
     }
     //edit building
     public function rentdetailsAction()
     {
         $this->init();
-		if(isset($this->_id) & $this->_id!=0):
-			$my = explode('-', (string) $this->_id);
-		endif;
-		if(sizeof($my)==0):
-			$my = array('1'); //default selection
+		$my = array(date('Y'), date('n'), '-1');
+		if(isset($this->_id) && $this->_id!=0):
+			$parts = explode('-', (string) $this->_id);
+			if (isset($parts[0]) && $parts[0] !== ''):
+				$my[0] = $parts[0];
+			endif;
+			if (isset($parts[1]) && $parts[1] !== ''):
+				$my[1] = $parts[1];
+			endif;
+			if (isset($parts[2]) && $parts[2] !== ''):
+				$my[2] = $parts[2];
+			endif;
 		endif;
 	
         $role=$this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_author,'role');
+        $roleArray = array_map('trim', explode(',', (string)$role));
+        $isPrivilegedRole = in_array('99', $roleArray, true)
+            || in_array('100', $roleArray, true);
         $admin_locs=$this->getDefinedTable(Administration\UsersTable::class)->getColumn($this->_author,'admin_location');
-			if($my[2]=="" ){
-                $my[2]='-1';
-            }else{
-                $my[2] = $my[2];
-            }
        
         if($role==99 || $role==100){
             $locationlist=$this->getDefinedTable(Realestate\RentTable::class)->getDistinct('r.location');
@@ -205,8 +271,9 @@ class RentController extends AbstractActionController
 			'month'				=> $my[1],
 			'year'				=> $my[0],
             'location'          => $my[2],
+			'is_highest_role'   => $isPrivilegedRole,
             'building' 		    => $this->getDefinedTable(Realestate\BuildingTable::class),
-            'asset' 			=> $this->getDefinedTable(Realestate\BuildingMasterTable::class),
+            'asset' 			=> $this->getDefinedTable(Asset\AssetmanagementTable::class),
             'locationObj' 		=> $this->getDefinedTable(Administration\LocationTable::class),
             'block' 			=> $this->getDefinedTable(Asset\AssettypeTable::class),
 			'floorObj' 			=> $this->getDefinedTable(Realestate\FloorMasterTable::class),
@@ -293,7 +360,9 @@ class RentController extends AbstractActionController
         
         
         ]);
-		$ViewModel->setTerminal(True);
+		if ($this->getRequest()->isXmlHttpRequest()) {
+			$ViewModel->setTerminal(true);
+		}
 		return $ViewModel;
  
     }
@@ -303,10 +372,21 @@ class RentController extends AbstractActionController
 public function submitAction()
 	{
 		$this->init(); 
-		$my = explode('-', (string) $this->_id);
+		$my = explode('-', (string) $this->_id, 3);
+		if (!isset($my[2]) || $my[2] === '') {
+			$my[2] = '-1';
+		}
 		$rents=$this->getDefinedTable(Realestate\RentTable::Class)->getRentByMonth($my[0],$my[1],$my[2]);
-        //print_r($rents);exit;
+		if (sizeof($rents) < 1) {
+			$this->flashMessenger()->addMessage("error^ Submit failed: no rent rows found for Year ".$my[0].", Month ".$my[1].", Location ".$my[2]);
+			return $this->redirect()->toRoute('rent',array('action' => 'rentdetails','id'=>$this->_id));
+		}
+		$submittedCount = 0;
+		$errorMessages = array();
 		foreach($rents as $rent):
+			if((int)$rent['status'] === 4){
+				continue;
+			}
 			$data = array(
 				'id'		=> $rent['id'],
 				'status' 	=> 4,
@@ -318,21 +398,43 @@ public function submitAction()
             $data = $this->_safedataObj->rteSafe($data);
 
             $result = $this->getDefinedTable(Realestate\RentTable::class)->save($data);
+			if (!$result) {
+				$errorMessages[] = "Failed updating rent status for row ID ".$rent['id'];
+				continue;
+			}
 			$day=date('d');
 			$rent_date=$rent['year'].'-'.$rent['month'].'-'.$day;
-			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($rent['location'], 'prefix');
+			$effectiveLocation = $rent['location'];
+			if (empty($effectiveLocation) || $effectiveLocation === '-1' || $effectiveLocation === -1) {
+				$derivedLocation = $this->getDefinedTable(Realestate\BuildingTable::class)->getColumn($rent['building'], 'location');
+				if (!empty($derivedLocation) && $derivedLocation !== '-1') {
+					$effectiveLocation = $derivedLocation;
+					$locationFixData = array(
+						'id' => $rent['id'],
+						'location' => $effectiveLocation,
+						'author' 	=> $this->_author,
+						'created' 	=> $this->_created,
+						'modified' 	=> $this->_modified,
+					);
+					$this->getDefinedTable(Realestate\RentTable::class)->save($locationFixData);
+				}
+			}
+			$loc = $this->getDefinedTable(Administration\LocationTable::class)->getcolumn($effectiveLocation, 'prefix');
 			$prefix = $this->getDefinedTable(Accounts\JournalTable::class)->getcolumn(16,'prefix');
+			if (empty($loc) || empty($prefix)) {
+				$errorMessages[] = "Missing location/journal prefix for rent row ID ".$rent['id'];
+				continue;
+			}
 			$date = date('ym',strtotime(date('Y-m-d')));
 				$tmp_VCNo = $loc.'-'.$prefix.$date;
 				
 				$results = $this->getDefinedTable(Accounts\TransactionTable::class)->getSerial($tmp_VCNo);
 				
-				$pltp_no_list = array();
+				$pltp_no_list = array(0);
 				foreach($results as $result):
 					array_push($pltp_no_list, substr($result['voucher_no'], -3));
 				endforeach;
 				$next_serial = max($pltp_no_list) + 1;
-					
 				switch(strlen($next_serial)){
 					case 1: $next_dc_serial = "0000".$next_serial; break;
 					case 2: $next_dc_serial = "000".$next_serial;  break;
@@ -341,8 +443,7 @@ public function submitAction()
 					default: $next_dc_serial = $next_serial;       break;
 				}	
 				$voucher_no = $tmp_VCNo.$next_dc_serial;
-				$region=$this->getDefinedTable(Administration\LocationTable::class)->getColumn($rent['location'],'region');
-				if($rent['status']!=4){
+				$region=$this->getDefinedTable(Administration\LocationTable::class)->getColumn($effectiveLocation,'region');
 					$data1 = array(
 						'voucher_date' =>$rent_date,
 						'voucher_type' => 16,
@@ -356,33 +457,29 @@ public function submitAction()
 						'modified' =>$this->_modified,
 					);
 					$resultt = $this->getDefinedTable(Accounts\TransactionTable::class)->save($data1);
-					$tdetailsdata = array(
-						'transaction' => $resultt,
-						'voucher_dates' =>$rent_date,
-						'voucher_types' => 16,
-						'location' => $rent['location'],
-						'head' =>191,
-						'sub_head' =>366,
-						'bank_ref_type' => '',
-						'debit' =>'0.000',
-						'credit' =>$rent['rent'],
-						'ref_no'=> $rent['ref_no'], 
-						'type' => '1',//user inputted  data
-						'status' => 4, // status initiated
-						'activity'=>$rent['location'],
-						'author' =>$this->_author,
-						'created' =>$this->_created,
-						'modified' =>$this->_modified,
-					);
-					$tdetailsdata = $this->_safedataObj->rteSafe($tdetailsdata);
-					$result1 = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->save($tdetailsdata);
+					if (!$resultt) {
+						$errorMessages[] = "Failed creating transaction for rent row ID ".$rent['id'];
+						continue;
+					}
+					$buildingHead = $this->getDefinedTable(Realestate\BuildingTable::class)->getColumn($rent['building'], 'head');
+					$buildingSubHead = $this->getDefinedTable(Realestate\BuildingTable::class)->getColumn($rent['building'], 'sub_head');
+					if (empty($buildingHead) || empty($buildingSubHead)) {
+						$errorMessages[] = "Missing building head/subhead mapping for building ID ".$rent['building']." (rent row ID ".$rent['id'].")";
+						continue;
+					}
+					$tenantHead = $this->getDefinedTable(Accounts\SubheadTable::class)->getSubheadfht(array('sh.ref_id'=>$rent['tenant'],'sh.type'=>2),'head');
+					$tenantSubHead = $this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('ref_id'=>$rent['tenant'],'type'=>2),'id');
+					if (empty($tenantHead) || empty($tenantSubHead)) {
+						$errorMessages[] = "Missing subhead mapping for tenant ID ".$rent['tenant']." (rent row ID ".$rent['id'].")";
+						continue;
+					}
 					$tdetailsdata = array(
 						'transaction' => $resultt,
 						'voucher_dates' => $rent_date,
 						'voucher_types' => 16,
-						'location' => $rent['location'],
-						'head' =>$this->getDefinedTable(Accounts\SubheadTable::class)->getSubheadfht(array('sh.ref_id'=>$rent['tenant'],'sh.type'=>2),'head'),
-						'sub_head' =>$this->getDefinedTable(Accounts\SubheadTable::class)->getColumn(array('ref_id'=>$rent['tenant'],'type'=>2),'id'),
+						'location' => $effectiveLocation,
+						'head' =>$tenantHead,
+						'sub_head' =>$tenantSubHead,
 						'bank_ref_type' => '',
 						'debit' =>$rent['rent'],
 						'credit' =>'0.000',
@@ -390,20 +487,50 @@ public function submitAction()
 						'ref_no'=> $rent['ref_no'], 
 						'type' => '1',//user inputted  data
 						'status' => 4, // status initiated
-						'activity'=>$rent['location'],
+						'activity'=>$effectiveLocation,
 						'author' =>$this->_author,
 						'created' =>$this->_created,
 						'modified' =>$this->_modified,
 					);
 					$tdetailsdata = $this->_safedataObj->rteSafe($tdetailsdata);
 					$result1 = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->save($tdetailsdata);
-				}
+					if (!$result1) {
+						$errorMessages[] = "Failed creating debit entry for rent row ID ".$rent['id'];
+						continue;
+					}
+					$tdetailsdata = array(
+						'transaction' => $resultt,
+						'voucher_dates' =>$rent_date,
+						'voucher_types' => 16,
+						'location' => $effectiveLocation,
+						'head' =>(int)$buildingHead,
+						'sub_head' =>(int)$buildingSubHead,
+						'bank_ref_type' => '',
+						'debit' =>'0.000',
+						'credit' =>$rent['rent'],
+						'ref_no'=> $rent['ref_no'], 
+						'type' => '1',//user inputted  data
+						'status' => 4, // status initiated
+						'activity'=>$effectiveLocation,
+						'author' =>$this->_author,
+						'created' =>$this->_created,
+						'modified' =>$this->_modified,
+					);
+					$tdetailsdata = $this->_safedataObj->rteSafe($tdetailsdata);
+					$result2 = $this->getDefinedTable(Accounts\TransactiondetailTable::class)->save($tdetailsdata);
+					if (!$result2) {
+						$errorMessages[] = "Failed creating credit entry for rent row ID ".$rent['id'];
+						continue;
+					}
+					$submittedCount++;
 		endforeach;
-		if($result):
-
+		if($submittedCount > 0 && sizeof($errorMessages) < 1):
 				$this->flashMessenger()->addMessage("success^ rent submition successful");
+			elseif($submittedCount > 0):
+				$this->flashMessenger()->addMessage("error^ Rent partially submitted (".$submittedCount." successful). Issue: ".$errorMessages[0]);
 			else:
-				$this->flashMessenger()->addMessage("error^ Failed to submitted rent");
+				$failureReason = (sizeof($errorMessages)>0)?$errorMessages[0]:"Unknown failure during rent submit";
+				$this->flashMessenger()->addMessage("error^ Failed to submitted rent. Issue: ".$failureReason);
 			endif;
 			//end			
 		
